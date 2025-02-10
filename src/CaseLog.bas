@@ -1,19 +1,22 @@
 Private Sub Worksheet_Change(ByVal Target As Range)
-    Dim rng As Range
-    ' Check if the change occurred in column F (Notes)
+    On Error GoTo CleanExit
+    Dim cell As Range
+    ' Check if any changes occur in column F (Notes)
     If Not Intersect(Target, Me.Range("F:F")) Is Nothing Then
-        Application.EnableEvents = False  ' Prevent re-triggering the event
-        For Each rng In Intersect(Target, Me.Range("F:F"))
-            ' If a note is now provided (non-empty), and Late Note Status (column H) says "NOTE REQUIRED", update it.
-            If Len(Trim(rng.Value)) > 0 Then
-                If UCase(Me.Cells(rng.Row, "H").Value) = "NOTE REQUIRED" Then
-                    Me.Cells(rng.Row, "H").Value = "Note provided"
-                    ' Remove any highlighting (set to no fill)
-                    Me.Cells(rng.Row, "H").Interior.ColorIndex = xlNone
-                End If
+        Application.EnableEvents = False  ' Disable events to prevent re-triggering
+        For Each cell In Intersect(Target, Me.Range("F:F"))
+            Debug.Print "Row " & cell.Row & " in column F changed to: " & cell.Value
+            ' If the cell in column F is non-empty, update the corresponding cell in column H to "Note provided"
+            If Len(Trim(cell.Value)) > 0 Then
+                Me.Cells(cell.Row, "H").Value = "Note provided"
+                Debug.Print "Row " & cell.Row & " in column H updated to 'Note provided'."
             End If
-        Next rng
-        Application.EnableEvents = True
+        Next cell
+    End If
+CleanExit:
+    Application.EnableEvents = True  ' Ensure events are re-enabled
+    If Err.Number <> 0 Then
+        MsgBox "An error occurred: " & Err.Description, vbExclamation, "Error"
     End If
 End Sub
 

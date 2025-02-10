@@ -19,6 +19,10 @@
 '   Log:
 '     A: Timestamp, B: Event (created automatically if missing)
 
+Option Explicit
+
+Public NextRefreshTime As Date
+
 ' ******************************
 ' Helper Function: SheetExists
 ' ******************************
@@ -142,11 +146,8 @@ End Function
 ' ******************************
 Sub UpdateDataImportFromCSV(caseID As String)
     Dim csvPath As String
-    Dim wbCSV As Workbook
-    Dim wsCSV As Worksheet
-    Dim rngFound As Range
-    Dim wsData As Worksheet
-    Dim lastRow As Long
+    Dim wbCSV As Workbook, wsCSV As Worksheet, rngFound As Range
+    Dim wsData As Worksheet, lastRow As Long
     
     csvPath = "C:\Exports\XSOAR_Export.csv"  ' Adjust as needed.
     
@@ -177,9 +178,7 @@ End Sub
 ' Sub: LogEvent
 ' ******************************
 Sub LogEvent(eventText As String)
-    Dim wsLogSheet As Worksheet
-    Dim nextRow As Long
-    
+    Dim wsLogSheet As Worksheet, nextRow As Long
     On Error Resume Next
     Set wsLogSheet = ThisWorkbook.Worksheets("Log")
     On Error GoTo 0
@@ -189,7 +188,6 @@ Sub LogEvent(eventText As String)
         wsLogSheet.Range("A1").Value = "Timestamp"
         wsLogSheet.Range("B1").Value = "Event"
     End If
-    
     nextRow = wsLogSheet.Cells(wsLogSheet.Rows.Count, "A").End(xlUp).Row + 1
     wsLogSheet.Cells(nextRow, "A").Value = Format(Now, "yyyy-mm-dd hh:nn:ss")
     wsLogSheet.Cells(nextRow, "B").Value = eventText
@@ -225,7 +223,6 @@ End Sub
 ' ******************************
 ' Sub: StartAutoRefresh
 ' ******************************
-Public NextRefreshTime As Date
 Sub StartAutoRefresh()
     NextRefreshTime = Now + TimeValue("00:05:00")
     Application.OnTime NextRefreshTime, "RefreshAllData"
@@ -350,8 +347,23 @@ Sub AddHelpCase()
             UpdateDataImportFromCSV caseID
             Set foundCell = FindCaseInDataImport(caseID)
             If foundCell Is Nothing Then
-                MsgBox "Case " & caseID & " still not found after updating from CSV. Please re-run the macro later.", vbExclamation, "Case Not Found"
-                LogEvent "Case " & caseID & " not found after CSV update. Manual re-check required."
+                ' CASE NOT FOUND: Add a placeholder row to the CaseLog
+                nextRow = wsLogSheet.Cells(wsLogSheet.Rows.Count, "A").End(xlUp).Row + 1
+                wsLogSheet.Cells(nextRow, "A").Value = caseID
+                wsLogSheet.Cells(nextRow, "B").Value = ownerFromQuick
+                wsLogSheet.Cells(nextRow, "C").Value = "N/A"          ' TimeCreated not available
+                wsLogSheet.Cells(nextRow, "D").Value = Now             ' QuickEntry Time
+                wsLogSheet.Cells(nextRow, "E").Value = "Data pending"  ' TimeClosed not available
+                wsLogSheet.Cells(nextRow, "F").Value = noteText
+                wsLogSheet.Cells(nextRow, "G").Value = "Data pending"  ' MTTP not available
+                wsLogSheet.Cells(nextRow, "H").Value = "Data pending"  ' Late Note Status not available
+                wsLogSheet.Cells(nextRow, "I").Value = "Data pending"  ' MTTR not available
+                wsLogSheet.Cells(nextRow, "J").Value = "Data pending"  ' Spike Detection not available
+                wsLogSheet.Cells(nextRow, "K").Value = "Data pending"  ' Inter-case Gap not available
+                MsgBox "Case " & caseID & " not found in Data_Import. Placeholder row added. Please update data later.", vbExclamation, "Case Not Found"
+                LogEvent "Case " & caseID & " placeholder added due to missing data."
+                ClearQuickEntry
+                UpdateDashboardTimestamp
                 Exit Sub
             End If
         End If
@@ -378,7 +390,6 @@ Sub AddHelpCase()
         If Len(noteText) = 0 Then
             MsgBox "This case was picked up " & pickupDelay & " minutes after creation. Please add a note for discussion.", vbExclamation, "Late Pickup"
             wsLogSheet.Cells(nextRow, "H").Value = "NOTE REQUIRED"
-            wsLogSheet.Cells(nextRow, "H").Interior.Color = vbYellow
             LogEvent "Case " & caseID & " picked up after " & pickupDelay & " minutes; note required."
         Else
             wsLogSheet.Cells(nextRow, "H").Value = "Note provided"
@@ -399,7 +410,6 @@ Sub AddHelpCase()
     spikeCount = GetSpikeCount(foundCell.Offset(0, 2).Value)
     If spikeCount >= 5 Then
         wsLogSheet.Cells(nextRow, "J").Value = "Spike Detected (" & spikeCount & " cases)"
-        wsLogSheet.Cells(nextRow, "J").Interior.Color = vbGreen
         LogEvent "Spike detected around case " & caseID & " (" & spikeCount & " cases)"
     Else
         wsLogSheet.Cells(nextRow, "J").Value = "No spike"
@@ -437,7 +447,9 @@ Sub CheckLateNotes()
     issuesCount = 0
     
     For i = 2 To lastRow
-        If UCase(Trim(wsLog.Cells(i, "H").Value)) = "NOTE REQUIRED" Then
+        Dim status As String
+        status = UCase(Trim(wsLog.Cells(i, "H").Value))
+        If status = "NOTE REQUIRED" Or status = "DATA PENDING" Then
             issuesCount = issuesCount + 1
         End If
     Next i
@@ -445,8 +457,103 @@ Sub CheckLateNotes()
     If issuesCount = 0 Then
         MsgBox "Congratulations, you rock!" & vbCrLf & "All cases that required notes have been addressed.", vbInformation, "Late Note Check"
     ElseIf issuesCount = 1 Then
-        MsgBox "There is 1 case with a pending note. Please address it when possible.", vbExclamation, "Late Note Check"
+        MsgBox "There is 1 case with a pending note or data issue. Please address it when possible.", vbExclamation, "Late Note Check"
     Else
-        MsgBox "There are " & issuesCount & " cases with pending notes. Please address these issues.", vbExclamation, "Late Note Check"
+        MsgBox "There are " & issuesCount & " cases with pending notes or data issues. Please address these issues.", vbExclamation, "Late Note Check"
+    End If
+End Sub
+
+' ******************************
+' Update Pending Data
+' ******************************
+Sub UpdatePendingData()
+    Dim wsData As Worksheet, wsCaseLog As Worksheet
+    Dim lastRowCaseLog As Long, i As Long
+    Dim caseID As String
+    Dim foundCell As Range
+    Dim updatedCount As Long
+    Dim pickupDelay As Double
+    
+    Set wsData = ThisWorkbook.Worksheets("Data_Import")
+    Set wsCaseLog = ThisWorkbook.Worksheets("CaseLog")
+    lastRowCaseLog = wsCaseLog.Cells(wsCaseLog.Rows.Count, "A").End(xlUp).Row
+    updatedCount = 0
+    
+    ' Loop through each row in CaseLog (starting at row 2, assuming headers in row 1)
+    For i = 2 To lastRowCaseLog
+        caseID = Trim(wsCaseLog.Cells(i, "A").Value)
+        If caseID <> "" Then
+            ' Check if either TimeCreated (Column C) or TimeClosed (Column E) is blank or a placeholder
+            If (Trim(UCase(wsCaseLog.Cells(i, "C").Value)) = "" Or _
+                Trim(UCase(wsCaseLog.Cells(i, "C").Value)) = "DATA PENDING" Or _
+                Trim(UCase(wsCaseLog.Cells(i, "C").Value)) = "N/A") Or _
+               (Trim(UCase(wsCaseLog.Cells(i, "E").Value)) = "" Or _
+                Trim(UCase(wsCaseLog.Cells(i, "E").Value)) = "DATA PENDING") Then
+                    
+                Set foundCell = wsData.Range("A:A").Find(What:=caseID, LookIn:=xlValues, LookAt:=xlWhole)
+                If Not foundCell Is Nothing Then
+                    ' Update TimeCreated (Column C) from Data_Import's Column C
+                    wsCaseLog.Cells(i, "C").Value = foundCell.Offset(0, 2).Value
+                    ' Update TimeClosed (Column E) from Data_Import's Column E if available; else "Open"
+                    If IsDate(foundCell.Offset(0, 4).Value) Then
+                        wsCaseLog.Cells(i, "E").Value = foundCell.Offset(0, 4).Value
+                    Else
+                        wsCaseLog.Cells(i, "E").Value = "Open"
+                    End If
+                    
+                    ' Recalculate MTTP (Column G) if TimeCreated and QuickEntry Time (Column D) are valid dates
+                    If IsDate(wsCaseLog.Cells(i, "C").Value) And IsDate(wsCaseLog.Cells(i, "D").Value) Then
+                        wsCaseLog.Cells(i, "G").Value = FormatMinutes(DateDiff("n", wsCaseLog.Cells(i, "C").Value, wsCaseLog.Cells(i, "D").Value))
+                    End If
+                    
+                    ' Recalculate Late Note Status (Column H) based on MTTP
+                    pickupDelay = DateDiff("n", wsCaseLog.Cells(i, "C").Value, wsCaseLog.Cells(i, "D").Value)
+                    If pickupDelay >= 30 Then
+                        If Len(Trim(wsCaseLog.Cells(i, "F").Value)) = 0 Then
+                            wsCaseLog.Cells(i, "H").Value = "NOTE REQUIRED"
+                        Else
+                            wsCaseLog.Cells(i, "H").Value = "Note provided"
+                        End If
+                    Else
+                        wsCaseLog.Cells(i, "H").Value = "On time"
+                    End If
+                    
+                    ' Recalculate MTTR (Column I) if both TimeCreated and TimeClosed are valid dates
+                    If IsDate(wsCaseLog.Cells(i, "C").Value) And IsDate(wsCaseLog.Cells(i, "E").Value) Then
+                        wsCaseLog.Cells(i, "I").Value = FormatMinutes(DateDiff("n", wsCaseLog.Cells(i, "C").Value, wsCaseLog.Cells(i, "E").Value))
+                    End If
+                    
+                    ' Recalculate Spike Detection (Column J) based on updated TimeCreated
+                    Dim spikeCount As Long
+                    spikeCount = GetSpikeCount(wsCaseLog.Cells(i, "C").Value)
+                    If spikeCount >= 5 Then
+                        wsCaseLog.Cells(i, "J").Value = "Spike Detected (" & spikeCount & " cases)"
+                    Else
+                        wsCaseLog.Cells(i, "J").Value = "No spike"
+                    End If
+                    
+                    ' Recalculate Inter-case Gap (Column K) for owner cases using QuickEntry Time (Column D)
+                    Dim ownerInLog As String
+                    ownerInLog = Trim(wsCaseLog.Cells(i, "B").Value)
+                    Dim lastClosedTime As Variant
+                    lastClosedTime = GetLastClosedTime(ownerInLog, wsCaseLog.Cells(i, "D").Value)
+                    If IsDate(lastClosedTime) Then
+                        wsCaseLog.Cells(i, "K").Value = FormatMinutes(DateDiff("n", lastClosedTime, wsCaseLog.Cells(i, "D").Value))
+                    Else
+                        wsCaseLog.Cells(i, "K").Value = "N/A"
+                    End If
+                    
+                    updatedCount = updatedCount + 1
+                End If
+            End If
+        End If
+    Next i
+    
+    If updatedCount = 0 Then
+        MsgBox "Update complete. No pending rows were updated.", vbInformation, "Update Pending Data"
+    ElseIf updatedCount = 1 Then
+        MsgBox "Update complete. 1 pending row was updated with new data.", vbInformation, "Update Pending Data"
+    Else
+        MsgBox "Update complete. " & updatedCount & " pending rows were updated with new data.", vbInformation, "Update Pending Data"
     End If
 End Sub
