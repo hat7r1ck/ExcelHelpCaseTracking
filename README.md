@@ -42,7 +42,7 @@ This project provides an Excel-based solution to track help cases—instances wh
    - **Log:** Automatically created for audit logging.
 
 4. **Set Up Data Import:**  
-   Follow the instructions in [helpful_excel_functions.md](docs/helpful_excel_functions.md) to configure Power Query for importing your case data.
+   Follow the instructions in [Helpful_Excel_Functions.md](docs/Helpful_Excel_Functions.md) to configure Power Query for importing your case data.
 
 5. **Log a Case:**  
    - Go to the **QuickEntry** sheet.
