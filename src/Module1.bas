@@ -1,24 +1,34 @@
 ' Module: Module1.bas
 ' Description: Comprehensive module for tracking help cases and related metrics,
-' including automatic sheet initialization, case logging with MTTP and MTTR,
-' spike detection, inter-case gap calculation, and a Late Note Checker.
+' including automatic sheet initialization.
 '
-' Expected sheet structures:
-'   Data_Import: 
+' Required sheets and headers:
+'   Data_Import:
 '     A: CaseID, B: Owner, C: TimeCreated, D: OtherInfo, E: TimeClosed
 '
-'   CaseLog: 
+'   CaseLog:
 '     A: CaseID, B: Owner, C: TimeCreated, D: QuickEntry Time, E: TimeClosed,
 '     F: Notes, G: MTTP, H: Late Note Status, I: MTTR, J: Spike Detection, K: Inter-case Gap
 '
-'   QuickEntry: 
+'   QuickEntry:
 '     B2: CaseID input, B3: Notes input, B4: Owner (entered by user)
 '
 '   Dashboard:
 '     B1: "Last Updated" timestamp
 '
 '   Log:
-'     Created automatically if missing
+'     A: Timestamp, B: Event (created automatically if missing)
+
+' ******************************
+' Helper Function: SheetExists
+' ******************************
+Function SheetExists(sheetName As String) As Boolean
+    Dim ws As Worksheet
+    On Error Resume Next
+    Set ws = ThisWorkbook.Worksheets(sheetName)
+    SheetExists = Not ws Is Nothing
+    On Error GoTo 0
+End Function
 
 ' ******************************
 ' Initialization Routine
@@ -26,13 +36,12 @@
 Sub InitializeWorkbook()
     Dim ws As Worksheet
     
-    ' Create Data_Import sheet if it doesn't exist
-    On Error Resume Next
-    Set ws = ThisWorkbook.Worksheets("Data_Import")
-    On Error GoTo 0
-    If ws Is Nothing Then
+    ' Data_Import
+    If Not SheetExists("Data_Import") Then
         Set ws = ThisWorkbook.Worksheets.Add(Before:=ThisWorkbook.Worksheets(1))
         ws.Name = "Data_Import"
+    Else
+        Set ws = ThisWorkbook.Worksheets("Data_Import")
     End If
     With ws
         .Range("A1").Value = "CaseID"
@@ -42,13 +51,12 @@ Sub InitializeWorkbook()
         .Range("E1").Value = "TimeClosed"
     End With
     
-    ' Create CaseLog sheet if it doesn't exist
-    On Error Resume Next
-    Set ws = ThisWorkbook.Worksheets("CaseLog")
-    On Error GoTo 0
-    If ws Is Nothing Then
+    ' CaseLog
+    If Not SheetExists("CaseLog") Then
         Set ws = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Worksheets(ThisWorkbook.Worksheets.Count))
         ws.Name = "CaseLog"
+    Else
+        Set ws = ThisWorkbook.Worksheets("CaseLog")
     End If
     With ws
         .Range("A1").Value = "CaseID"
@@ -64,40 +72,37 @@ Sub InitializeWorkbook()
         .Range("K1").Value = "Inter-case Gap"
     End With
     
-    ' Create QuickEntry sheet if it doesn't exist
-    On Error Resume Next
-    Set ws = ThisWorkbook.Worksheets("QuickEntry")
-    On Error GoTo 0
-    If ws Is Nothing Then
+    ' QuickEntry
+    If Not SheetExists("QuickEntry") Then
         Set ws = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Worksheets("CaseLog"))
         ws.Name = "QuickEntry"
+    Else
+        Set ws = ThisWorkbook.Worksheets("QuickEntry")
     End If
     With ws
-        .Range("A1").Value = "QuickEntry Sheet - Enter the CaseID in B2, Notes in B3, and your Owner ID in B4"
+        .Range("A1").Value = "QuickEntry Sheet - Enter CaseID in B2, Notes in B3, and Owner ID in B4"
         .Range("B2").Value = ""
         .Range("B3").Value = ""
         .Range("B4").Value = ""
     End With
     
-    ' Create Dashboard sheet if it doesn't exist
-    On Error Resume Next
-    Set ws = ThisWorkbook.Worksheets("Dashboard")
-    On Error GoTo 0
-    If ws Is Nothing Then
+    ' Dashboard
+    If Not SheetExists("Dashboard") Then
         Set ws = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Worksheets("QuickEntry"))
         ws.Name = "Dashboard"
+    Else
+        Set ws = ThisWorkbook.Worksheets("Dashboard")
     End If
     With ws
         .Range("B1").Value = "Last Updated: " & Format(Now, "yyyy-mm-dd hh:nn:ss")
     End With
     
-    ' Create Log sheet if it doesn't exist
-    On Error Resume Next
-    Set ws = ThisWorkbook.Worksheets("Log")
-    On Error GoTo 0
-    If ws Is Nothing Then
+    ' Log
+    If Not SheetExists("Log") Then
         Set ws = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Worksheets("Dashboard"))
         ws.Name = "Log"
+    Else
+        Set ws = ThisWorkbook.Worksheets("Log")
     End If
     With ws
         .Range("A1").Value = "Timestamp"
@@ -124,7 +129,7 @@ Function FormatMinutes(mins As Double) As String
 End Function
 
 ' ******************************
-' 1. Function: FindCaseInDataImport
+' Function: FindCaseInDataImport
 ' ******************************
 Function FindCaseInDataImport(caseID As String) As Range
     Dim wsData As Worksheet
@@ -133,7 +138,7 @@ Function FindCaseInDataImport(caseID As String) As Range
 End Function
 
 ' ******************************
-' 2. Update Data from CSV Export
+' Sub: UpdateDataImportFromCSV
 ' ******************************
 Sub UpdateDataImportFromCSV(caseID As String)
     Dim csvPath As String
@@ -143,7 +148,7 @@ Sub UpdateDataImportFromCSV(caseID As String)
     Dim wsData As Worksheet
     Dim lastRow As Long
     
-    csvPath = "C:\Exports\XSOAR_Export.csv"
+    csvPath = "C:\Exports\XSOAR_Export.csv"  ' Adjust as needed.
     
     On Error Resume Next
     Set wbCSV = Workbooks.Open(csvPath)
@@ -169,7 +174,7 @@ Sub UpdateDataImportFromCSV(caseID As String)
 End Sub
 
 ' ******************************
-' 3. Operation Logging
+' Sub: LogEvent
 ' ******************************
 Sub LogEvent(eventText As String)
     Dim wsLogSheet As Worksheet
@@ -191,7 +196,7 @@ Sub LogEvent(eventText As String)
 End Sub
 
 ' ******************************
-' 4. Clear QuickEntry Fields
+' Sub: ClearQuickEntry
 ' ******************************
 Sub ClearQuickEntry()
     Dim wsQuick As Worksheet
@@ -201,7 +206,7 @@ Sub ClearQuickEntry()
 End Sub
 
 ' ******************************
-' 5. Update Dashboard Timestamp
+' Sub: UpdateDashboardTimestamp
 ' ******************************
 Sub UpdateDashboardTimestamp()
     Dim wsDash As Worksheet
@@ -210,7 +215,7 @@ Sub UpdateDashboardTimestamp()
 End Sub
 
 ' ******************************
-' 6. Refresh All Data Connections
+' Sub: RefreshAllData
 ' ******************************
 Sub RefreshAllData()
     ThisWorkbook.RefreshAll
@@ -218,16 +223,18 @@ Sub RefreshAllData()
 End Sub
 
 ' ******************************
-' 7. Auto-Refresh Timer (Optional)
+' Sub: StartAutoRefresh
 ' ******************************
 Public NextRefreshTime As Date
-
 Sub StartAutoRefresh()
     NextRefreshTime = Now + TimeValue("00:05:00")
     Application.OnTime NextRefreshTime, "RefreshAllData"
     LogEvent "Auto-refresh scheduled at " & Format(NextRefreshTime, "hh:nn:ss")
 End Sub
 
+' ******************************
+' Sub: StopAutoRefresh
+' ******************************
 Sub StopAutoRefresh()
     On Error Resume Next
     Application.OnTime EarliestTime:=NextRefreshTime, Procedure:="RefreshAllData", Schedule:=False
@@ -235,14 +242,11 @@ Sub StopAutoRefresh()
 End Sub
 
 ' ******************************
-' 8. Function: DetectSpike
+' Function: DetectSpike
 ' ******************************
 Function DetectSpike(creationTime As Date) As Boolean
-    Dim wsData As Worksheet
-    Dim cell As Range
-    Dim countSpike As Long
+    Dim wsData As Worksheet, cell As Range, countSpike As Long
     Dim lowerBound As Date, upperBound As Date
-    
     lowerBound = DateAdd("n", -5, creationTime)
     upperBound = DateAdd("n", 5, creationTime)
     Set wsData = ThisWorkbook.Worksheets("Data_Import")
@@ -254,29 +258,43 @@ Function DetectSpike(creationTime As Date) As Boolean
             End If
         End If
     Next cell
-    
     DetectSpike = (countSpike >= 5)
 End Function
 
 ' ******************************
-' 9. Function: GetLastClosedTime
+' Function: GetSpikeCount
+' ******************************
+Function GetSpikeCount(creationTime As Date) As Long
+    Dim wsData As Worksheet, cell As Range, countSpike As Long
+    Dim lowerBound As Date, upperBound As Date
+    lowerBound = DateAdd("n", -5, creationTime)
+    upperBound = DateAdd("n", 5, creationTime)
+    Set wsData = ThisWorkbook.Worksheets("Data_Import")
+    countSpike = 0
+    For Each cell In wsData.Range("C2:C" & wsData.Cells(wsData.Rows.Count, "C").End(xlUp).Row)
+        If IsDate(cell.Value) Then
+            If cell.Value >= lowerBound And cell.Value <= upperBound Then
+                countSpike = countSpike + 1
+            End If
+        End If
+    Next cell
+    GetSpikeCount = countSpike
+End Function
+
+' ******************************
+' Function: GetLastClosedTime
 ' ******************************
 Function GetLastClosedTime(ownerID As String, currentPickupTime As Date) As Variant
-    Dim wsData As Worksheet
-    Dim lastClosed As Date
-    Dim cell As Range
-    Dim currentDate As Date
-    Dim found As Boolean
-    
+    Dim wsData As Worksheet, lastClosed As Date, cell As Range
+    Dim currentDate As Date, found As Boolean
     Set wsData = ThisWorkbook.Worksheets("Data_Import")
     found = False
     lastClosed = 0
     Dim lastRow As Long
     lastRow = wsData.Cells(wsData.Rows.Count, "B").End(xlUp).Row
-    
     For Each cell In wsData.Range("B2:B" & lastRow)
         If LCase(cell.Value) = LCase(ownerID) Then
-            If IsDate(cell.Offset(0, 3).Value) Then
+            If IsDate(cell.Offset(0, 3).Value) Then  ' TimeClosed in column E
                 currentDate = cell.Offset(0, 3).Value
                 If currentDate < currentPickupTime Then
                     If Not found Then
@@ -289,7 +307,6 @@ Function GetLastClosedTime(ownerID As String, currentPickupTime As Date) As Vari
             End If
         End If
     Next cell
-    
     If found Then
         GetLastClosedTime = lastClosed
     Else
@@ -298,17 +315,12 @@ Function GetLastClosedTime(ownerID As String, currentPickupTime As Date) As Vari
 End Function
 
 ' ******************************
-' 10. Main Routine: AddHelpCase
+' Main Routine: AddHelpCase
 ' ******************************
 Sub AddHelpCase()
-    Dim wsData As Worksheet         ' Data_Import sheet
-    Dim wsLogSheet As Worksheet     ' CaseLog sheet
-    Dim wsQuick As Worksheet        ' QuickEntry sheet for input
-    Dim caseID As String            ' Entered CaseID
-    Dim noteText As String          ' Optional notes
-    Dim ownerFromQuick As String    ' Owner from QuickEntry (B4)
-    Dim foundCell As Range          ' Found case in Data_Import
-    Dim nextRow As Long             ' Next available row in CaseLog
+    Dim wsData As Worksheet, wsLogSheet As Worksheet, wsQuick As Worksheet
+    Dim caseID As String, noteText As String, ownerFromQuick As String
+    Dim foundCell As Range, nextRow As Long
     
     Set wsData = ThisWorkbook.Worksheets("Data_Import")
     Set wsLogSheet = ThisWorkbook.Worksheets("CaseLog")
@@ -347,7 +359,6 @@ Sub AddHelpCase()
     
     nextRow = wsLogSheet.Cells(wsLogSheet.Rows.Count, "A").End(xlUp).Row + 1
     
-    ' Log details into CaseLog:
     wsLogSheet.Cells(nextRow, "A").Value = foundCell.Value                      ' CaseID
     wsLogSheet.Cells(nextRow, "B").Value = foundCell.Offset(0, 1).Value           ' Owner
     wsLogSheet.Cells(nextRow, "C").Value = foundCell.Offset(0, 2).Value           ' TimeCreated
@@ -384,12 +395,12 @@ Sub AddHelpCase()
         wsLogSheet.Cells(nextRow, "I").Value = "Open"
     End If
     
-    Dim spikeDetected As Boolean
-    spikeDetected = DetectSpike(foundCell.Offset(0, 2).Value)
-    If spikeDetected Then
-        wsLogSheet.Cells(nextRow, "J").Value = "Spike Detected"
+    Dim spikeCount As Long
+    spikeCount = GetSpikeCount(foundCell.Offset(0, 2).Value)
+    If spikeCount >= 5 Then
+        wsLogSheet.Cells(nextRow, "J").Value = "Spike Detected (" & spikeCount & " cases)"
         wsLogSheet.Cells(nextRow, "J").Interior.Color = vbGreen
-        LogEvent "Spike detected around case " & caseID
+        LogEvent "Spike detected around case " & caseID & " (" & spikeCount & " cases)"
     Else
         wsLogSheet.Cells(nextRow, "J").Value = "No spike"
     End If
@@ -414,7 +425,7 @@ Sub AddHelpCase()
 End Sub
 
 ' ******************************
-' 11. Late Note Checker Subroutine
+' Late Note Checker Subroutine
 ' ******************************
 Sub CheckLateNotes()
     Dim wsLog As Worksheet
