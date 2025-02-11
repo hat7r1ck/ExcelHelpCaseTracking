@@ -1,0 +1,39 @@
+let
+    fnConvertTime = (timeText as text) as nullable datetimezone =>
+        let
+            // Determine the offset string based on known abbreviations
+            offset = if Text.Contains(timeText, "EST") then "-0500"
+                     else if Text.Contains(timeText, "EDT") then "-0400"
+                     else if Text.Contains(timeText, "PST") then "-0800"
+                     else if Text.Contains(timeText, "PDT") then "-0700"
+                     else if Text.Contains(timeText, "MST") then "-0700"
+                     else if Text.Contains(timeText, "MDT") then "-0600"
+                     else if Text.Contains(timeText, "UTC") then "+0000"
+                     else if Text.Contains(timeText, "Arizona") then "-0700"
+                     else "";
+            // Remove the abbreviation text from the original string
+            cleanText = timeText,
+            cleanText = Text.Replace(cleanText, " EST", ""),
+            cleanText = Text.Replace(cleanText, " EDT", ""),
+            cleanText = Text.Replace(cleanText, " PST", ""),
+            cleanText = Text.Replace(cleanText, " PDT", ""),
+            cleanText = Text.Replace(cleanText, " MST", ""),
+            cleanText = Text.Replace(cleanText, " MDT", ""),
+            cleanText = Text.Replace(cleanText, " UTC", ""),
+            cleanText = Text.Replace(cleanText, " Arizona", ""),
+            // Ensure there is a "T" between date and time (assumes date is in yyyy-mm-dd)
+            withT = if Text.Contains(cleanText, "T") then cleanText else Text.Insert(cleanText, 10, "T"),
+            // Remove any extra spaces
+            noSpaces = Text.Replace(withT, " ", ""),
+            // Append the numeric offset if it isn’t already present and if we determined one
+            appended = if offset <> "" and not Text.End(noSpaces, 5) = offset then noSpaces & offset else noSpaces,
+            // If the offset still doesn’t include a colon (e.g. "-0500"), insert one (to become "-05:00")
+            finalText = if Text.Length(appended) >= 5 and not Text.Contains(Text.End(appended, 5), ":") then
+                            Text.Insert(appended, Text.Length(appended)-2, ":")
+                        else
+                            appended,
+            parsed = try DateTimeZone.FromText(finalText) otherwise null
+        in
+            parsed
+in
+    fnConvertTime
