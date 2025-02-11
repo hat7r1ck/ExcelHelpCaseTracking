@@ -1,38 +1,25 @@
 let
     fnConvertTime = (timeText as text) as nullable datetimezone =>
         let
-            // Determine the offset string based on known abbreviations.
-            offset = if Text.Contains(timeText, "EST") then "-0500"
-                     else if Text.Contains(timeText, "EDT") then "-0400"
-                     else if Text.Contains(timeText, "PST") then "-0800"
-                     else if Text.Contains(timeText, "PDT") then "-0700"
-                     else if Text.Contains(timeText, "MST") then "-0700"
-                     else if Text.Contains(timeText, "MDT") then "-0600"
-                     else if Text.Contains(timeText, "UTC") then "+0000"
-                     else if Text.Contains(timeText, "Arizona") then "-0700"
-                     else "",
-            // Remove all common time zone abbreviations with a single nested Text.Replace.
-            cleanText = Text.Replace(
-                          Text.Replace(
-                          Text.Replace(
-                          Text.Replace(
-                          Text.Replace(
-                          Text.Replace(
-                          Text.Replace(
-                          Text.Replace(timeText, " EST", ""), " EDT", ""), " PST", ""), " PDT", ""), " MST", ""), " MDT", ""), " UTC", ""), " Arizona", ""),
-            // Ensure there is a "T" between date and time (assumes the date is in yyyy-mm-dd).
-            withT = if Text.Contains(cleanText, "T") then cleanText else Text.Insert(cleanText, 10, "T"),
-            // Remove any extra spaces.
+            // Remove leading/trailing spaces.
+            trimmed = Text.Trim(timeText),
+            // Remove known timezone abbreviations.
+            removedAbbreviations = List.Accumulate(
+                {" EST", " EDT", " PST", " PDT", " MST", " MDT", " UTC", " Arizona"},
+                trimmed,
+                (state, current) => Text.Replace(state, current, "")
+            ),
+            // Insert a "T" between date and time if missing (assuming date is 10 characters).
+            withT = if Text.Contains(removedAbbreviations, "T") then removedAbbreviations 
+                    else Text.Insert(removedAbbreviations, 10, "T"),
+            // Remove all spaces.
             noSpaces = Text.Replace(withT, " ", ""),
-            // Append the numeric offset if it's not already present.
-            appended = if offset <> "" and not Text.End(noSpaces, 5) = offset then noSpaces & offset else noSpaces,
-            // Insert a colon into the offset if missing (e.g. "-0500" → "-05:00").
-            finalText = if Text.Length(appended) >= 5 and not Text.Contains(Text.End(appended, 5), ":") then
-                            Text.Insert(appended, Text.Length(appended)-2, ":")
-                        else
-                            appended,
-            // Try to parse the final text as a DateTimeZone value.
-            parsed = try DateTimeZone.FromText(finalText) otherwise null
+            // Check if the last 5 characters (the offset) contain a colon. If not, insert one.
+            lenNoSpaces = Text.Length(noSpaces),
+            lastFive = if lenNoSpaces >= 5 then Text.End(noSpaces, 5) else "",
+            withColon = if lastFive <> "" and not Text.Contains(lastFive, ":") then Text.Insert(noSpaces, lenNoSpaces - 2, ":") else noSpaces,
+            // Attempt to parse the final string as a DateTimeZone value.
+            parsed = try DateTimeZone.FromText(withColon) otherwise null
         in
             parsed
 in
