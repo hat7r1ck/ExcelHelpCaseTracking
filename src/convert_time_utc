@@ -1,40 +1,22 @@
 let
     fnConvertTimeUTC = (timeText as text) as nullable datetimezone =>
         let
-            // Step 1: Trim the input.
+            // Trim the input string.
             trimmed = Text.Trim(timeText),
-            // Step 2: Remove a trailing timezone abbreviation if present.
-            // Checks for " EST", " EDT", " PST", " PDT", " MST", " MDT", " UTC".
-            noAbbrev = 
-                if Text.End(trimmed, 4) = " EST" or 
-                   Text.End(trimmed, 4) = " EDT" or 
-                   Text.End(trimmed, 4) = " PST" or 
-                   Text.End(trimmed, 4) = " PDT" or 
-                   Text.End(trimmed, 4) = " MST" or 
-                   Text.End(trimmed, 4) = " MDT" or 
-                   Text.End(trimmed, 4) = " UTC" 
-                then Text.Start(trimmed, Text.Length(trimmed) - 4)
-                else trimmed,
-            // (Optional) If the string ends with " Arizona" (8 characters), remove that.
-            noAbbrev2 =
-                if Text.End(noAbbrev, 8) = " Arizona" 
-                then Text.Start(noAbbrev, Text.Length(noAbbrev) - 8)
-                else noAbbrev,
-            // Step 3: Ensure there is a "T" between the date and time.
-            withT = if Text.Contains(noAbbrev2, "T") then noAbbrev2 else Text.Insert(noAbbrev2, 10, "T"),
-            // Step 4: Remove any remaining spaces.
-            clean = Text.Replace(withT, " ", ""),
-            // Step 5: Fix the numeric offset.
-            // Assume the last 5 characters represent the offset, e.g. "-0500".
-            lenClean = Text.Length(clean),
-            offsetPart = if lenClean >= 5 then Text.End(clean, 5) else "",
-            finalText = if offsetPart <> "" and not Text.Contains(offsetPart, ":") 
-                        then Text.Insert(clean, lenClean - 2, ":") 
-                        else clean,
-            // Step 6: Parse the final text as a DateTimeZone.
-            dtZone = DateTimeZone.FromText(finalText),
-            // Step 7: Convert the value to UTC.
-            utcTime = DateTimeZone.SwitchZone(dtZone, 0)
+            // Split the string into parts by spaces.
+            parts = Text.Split(trimmed, " "),
+            // Expect the parts to be: [date, time, numeric offset, (optional abbreviation)]
+            datePart = parts{0},
+            timePart = parts{1},
+            numericOffset = if List.Count(parts) >= 3 then parts{2} else "",
+            // If numericOffset is exactly 5 characters (e.g. "-0500"), insert a colon to get "-05:00".
+            offsetFormatted = if Text.Length(numericOffset) = 5 then Text.Insert(numericOffset, 3, ":") else numericOffset,
+            // Rebuild the ISO8601 string.
+            isoString = datePart & "T" & timePart & offsetFormatted,
+            // Parse the string as a DateTimeZone.
+            dtZone = try DateTimeZone.FromText(isoString) otherwise null,
+            // Switch the parsed time to UTC.
+            utcTime = if dtZone <> null then DateTimeZone.SwitchZone(dtZone, 0) else null
         in
             utcTime
 in
