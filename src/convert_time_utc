@@ -1,7 +1,6 @@
 // Power Query function to convert 'yyyy-MM-dd HH:mm:ss.fff ±hhmm TTT' to UTC datetimezone
-(ConvertToUtc as function) = 
 let
-    ConvertToUtc = (timestampText as text) as datetimezone =>
+    ConvertToUtc = (timestampText as text) as nullable datetimezone =>
         let
             // 1. Trim and split the input timestamp into parts
             trimmed    = Text.Trim(timestampText),
@@ -25,26 +24,7 @@ let
                                     hrs = Number.From(Text.Range(offsetStr, 1, 2)),
                                     sign = if Text.StartsWith(offsetStr, "-") then -1 else 1
                                 in sign * hrs
-                            else 
-                                // Fallback: derive hours from abbreviation
-                                if tzAbbrev <> null then 
-                                    if List.Contains({"UTC", "GMT"}, tzAbbrev) then 0
-                                    else if tzAbbrev = "EST" then -5 
-                                    else if tzAbbrev = "EDT" then -4 
-                                    else if tzAbbrev = "CST" then -6 
-                                    else if tzAbbrev = "CDT" then -5 
-                                    else if tzAbbrev = "MST" then -7 
-                                    else if tzAbbrev = "MDT" then -6 
-                                    else if tzAbbrev = "PST" then -8 
-                                    else if tzAbbrev = "PDT" then -7 
-                                    else if tzAbbrev = "CET" then 1 
-                                    else if tzAbbrev = "CEST" then 2 
-                                    else if tzAbbrev = "EET" then 2 
-                                    else if tzAbbrev = "EEST" then 3 
-                                    else if tzAbbrev = "IST" then 5    // IST (India) = UTC+5:30
-                                    else if tzAbbrev = "JST" then 9 
-                                    else 0  // default to 0 if unknown
-                                else 0,
+                            else 0,
             offsetMinutes = if offsetStr <> null then 
                                 let 
                                     mins = if Text.Length(offsetStr) >= 5 
@@ -52,35 +32,10 @@ let
                                            else 0,
                                     sign = if Text.StartsWith(offsetStr, "-") then -1 else 1
                                 in sign * mins
-                            else 
-                                // Fallback: derive minutes from abbreviation
-                                if tzAbbrev <> null then 
-                                    if tzAbbrev = "IST" then 30       // IST = +05:30
-                                    else if tzAbbrev = "ACST" then 30  // ACST = +09:30 (example)
-                                    else 0 
-                                else 0,
+                            else 0,
 
-            // 3. Combine date and time (handle fractional seconds if present)
-            dateValue = try Date.FromText(datePart) otherwise null,
-            // Use Time.FromText to handle "HH:mm:ss.fff" (supports milliseconds)
-            timeValue = try Time.FromText(timePart) otherwise null,
-            // If parsing fails, manually split time to handle fractional seconds
-            timeTokens = if timeValue = null 
-                         then Text.Split(timePart, ".") 
-                         else null,
-            baseTime   = if timeValue = null then List.First(timeTokens) else null,
-            fracSecStr = if timeValue = null and List.Count(timeTokens) > 1 
-                         then List.Last(timeTokens) 
-                         else "0",
-            // Build time from tokens if needed
-            baseTimeValue = if timeValue = null and baseTime <> null 
-                            then Time.FromText(baseTime) 
-                            else timeValue,
-            fracSecValue = Number.From("0." & Text.PadEnd(fracSecStr, 3, "0")),  // e.g. "123" -> 0.123
-            // Create a datetime value (combining date and time)
-            localDateTime = if baseTimeValue <> null 
-                            then DateTime.From(dateValue & baseTimeValue) + #duration(0, 0, 0, fracSecValue) 
-                            else null,
+            // 3. Combine date and time
+            localDateTime = try DateTime.FromText(datePart & " " & timePart) otherwise null,
 
             // 4. Attach the original timezone offset to get a datetimezone
             localDateTimeZone = if localDateTime <> null 
