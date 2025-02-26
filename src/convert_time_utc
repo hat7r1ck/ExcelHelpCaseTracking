@@ -3,15 +3,20 @@ let
         let
             // Step 1: Trim the input.
             trimmed = Text.Trim(timeText),
-            // Step 2: Remove trailing abbreviation by taking text before the last space.
-            noAbbrev = if Text.Contains(trimmed, " ") 
-                       then Text.BeforeDelimiter(trimmed, " ", {RelativePosition.FromEnd}) 
-                       else trimmed,
-            // Step 3: Ensure there's a "T" between the date and time (assumes date is 10 characters).
+            // Step 2: Remove any known timezone abbreviation only if it appears at the end.
+            noAbbrev = List.Accumulate(
+                {" EST", " EDT", " PST", " PDT", " MST", " MDT", " UTC", " Arizona"},
+                trimmed,
+                (state, current) => 
+                    if Text.End(state, Text.Length(current)) = current 
+                    then Text.Trim(Text.Start(state, Text.Length(state) - Text.Length(current)))
+                    else state
+            ),
+            // Step 3: Ensure there is a "T" between date and time.
             withT = if Text.Contains(noAbbrev, "T") then noAbbrev else Text.Insert(noAbbrev, 10, "T"),
             // Step 4: Remove any remaining spaces.
             noSpaces = Text.Replace(withT, " ", ""),
-            // Step 5: Fix the numeric offset.
+            // Step 5: Fix the numeric offset:
             // Assume the last 5 characters represent the offset (like "-0500").
             lenText = Text.Length(noSpaces),
             lastFive = if lenText >= 5 then Text.End(noSpaces, 5) else "",
@@ -20,7 +25,7 @@ let
                         else noSpaces,
             // Step 6: Parse the fixed text as a DateTimeZone.
             dtZone = try DateTimeZone.FromText(fixedText) otherwise null,
-            // Step 7: Convert to UTC (offset 0).
+            // Step 7: Force the value to UTC.
             utcTime = if dtZone <> null then DateTimeZone.SwitchZone(dtZone, 0) else null
         in
             utcTime
