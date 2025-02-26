@@ -1,25 +1,27 @@
 let
     fnConvertTimeUTC = (timeText as text) as nullable datetimezone =>
         let
-            // Remove leading/trailing spaces.
+            // Step 1: Trim the input.
             trimmed = Text.Trim(timeText),
-            // Remove the trailing abbreviation by taking the text before the last space.
-            // This assumes the numeric offset and the abbreviation are separated by a space.
-            noAbbrev = Text.BeforeDelimiter(trimmed, " ", {RelativePosition.FromEnd}),
-            // Now noAbbrev should be like: "2025-02-24 18:07:50.72718703 -0500"
-            
-            // Insert a "T" between date and time if it's not present.
+            // Step 2: Remove trailing abbreviation by taking text before the last space.
+            noAbbrev = if Text.Contains(trimmed, " ") 
+                       then Text.BeforeDelimiter(trimmed, " ", {RelativePosition.FromEnd}) 
+                       else trimmed,
+            // Step 3: Ensure there's a "T" between the date and time (assumes date is 10 characters).
             withT = if Text.Contains(noAbbrev, "T") then noAbbrev else Text.Insert(noAbbrev, 10, "T"),
-            // Remove any extra spaces.
+            // Step 4: Remove any remaining spaces.
             noSpaces = Text.Replace(withT, " ", ""),
-            // Ensure the offset is in proper format: if the last 5 characters (e.g. "-0500") lack a colon, insert one.
+            // Step 5: Fix the numeric offset.
+            // Assume the last 5 characters represent the offset (like "-0500").
             lenText = Text.Length(noSpaces),
-            offsetPart = if lenText >= 5 then Text.End(noSpaces, 5) else "",
-            fixedText = if offsetPart <> "" and not Text.Contains(offsetPart, ":") then Text.Insert(noSpaces, lenText - 2, ":") else noSpaces,
-            // Parse the fixed text as a DateTimeZone.
-            dtZone = DateTimeZone.FromText(fixedText),
-            // Convert the value to UTC (offset 0).
-            utcTime = DateTimeZone.SwitchZone(dtZone, 0)
+            lastFive = if lenText >= 5 then Text.End(noSpaces, 5) else "",
+            fixedText = if lastFive <> "" and not Text.Contains(lastFive, ":") 
+                        then Text.Insert(noSpaces, lenText - 2, ":") 
+                        else noSpaces,
+            // Step 6: Parse the fixed text as a DateTimeZone.
+            dtZone = try DateTimeZone.FromText(fixedText) otherwise null,
+            // Step 7: Convert to UTC (offset 0).
+            utcTime = if dtZone <> null then DateTimeZone.SwitchZone(dtZone, 0) else null
         in
             utcTime
 in
