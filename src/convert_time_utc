@@ -3,30 +3,38 @@ let
         let
             // Step 1: Trim the input.
             trimmed = Text.Trim(timeText),
-            // Step 2: Remove any known timezone abbreviation only if it appears at the end.
-            noAbbrev = List.Accumulate(
-                {" EST", " EDT", " PST", " PDT", " MST", " MDT", " UTC", " Arizona"},
-                trimmed,
-                (state, current) => 
-                    if Text.End(state, Text.Length(current)) = current 
-                    then Text.Trim(Text.Start(state, Text.Length(state) - Text.Length(current)))
-                    else state
-            ),
-            // Step 3: Ensure there is a "T" between date and time.
-            withT = if Text.Contains(noAbbrev, "T") then noAbbrev else Text.Insert(noAbbrev, 10, "T"),
+            // Step 2: Remove a trailing timezone abbreviation if present.
+            // Checks for " EST", " EDT", " PST", " PDT", " MST", " MDT", " UTC".
+            noAbbrev = 
+                if Text.End(trimmed, 4) = " EST" or 
+                   Text.End(trimmed, 4) = " EDT" or 
+                   Text.End(trimmed, 4) = " PST" or 
+                   Text.End(trimmed, 4) = " PDT" or 
+                   Text.End(trimmed, 4) = " MST" or 
+                   Text.End(trimmed, 4) = " MDT" or 
+                   Text.End(trimmed, 4) = " UTC" 
+                then Text.Start(trimmed, Text.Length(trimmed) - 4)
+                else trimmed,
+            // (Optional) If the string ends with " Arizona" (8 characters), remove that.
+            noAbbrev2 =
+                if Text.End(noAbbrev, 8) = " Arizona" 
+                then Text.Start(noAbbrev, Text.Length(noAbbrev) - 8)
+                else noAbbrev,
+            // Step 3: Ensure there is a "T" between the date and time.
+            withT = if Text.Contains(noAbbrev2, "T") then noAbbrev2 else Text.Insert(noAbbrev2, 10, "T"),
             // Step 4: Remove any remaining spaces.
-            noSpaces = Text.Replace(withT, " ", ""),
-            // Step 5: Fix the numeric offset:
-            // Assume the last 5 characters represent the offset (like "-0500").
-            lenText = Text.Length(noSpaces),
-            lastFive = if lenText >= 5 then Text.End(noSpaces, 5) else "",
-            fixedText = if lastFive <> "" and not Text.Contains(lastFive, ":") 
-                        then Text.Insert(noSpaces, lenText - 2, ":") 
-                        else noSpaces,
-            // Step 6: Parse the fixed text as a DateTimeZone.
-            dtZone = try DateTimeZone.FromText(fixedText) otherwise null,
-            // Step 7: Force the value to UTC.
-            utcTime = if dtZone <> null then DateTimeZone.SwitchZone(dtZone, 0) else null
+            clean = Text.Replace(withT, " ", ""),
+            // Step 5: Fix the numeric offset.
+            // Assume the last 5 characters represent the offset, e.g. "-0500".
+            lenClean = Text.Length(clean),
+            offsetPart = if lenClean >= 5 then Text.End(clean, 5) else "",
+            finalText = if offsetPart <> "" and not Text.Contains(offsetPart, ":") 
+                        then Text.Insert(clean, lenClean - 2, ":") 
+                        else clean,
+            // Step 6: Parse the final text as a DateTimeZone.
+            dtZone = DateTimeZone.FromText(finalText),
+            // Step 7: Convert the value to UTC.
+            utcTime = DateTimeZone.SwitchZone(dtZone, 0)
         in
             utcTime
 in
