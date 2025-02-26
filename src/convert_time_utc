@@ -1,34 +1,33 @@
 let
-    fnConvertTimeUTC = (timeText as text) as nullable datetime =>
+    fnConvertTimeUTC = (timeText as text) as nullable datetimezone =>
         let
             // Trim the input.
             trimmed = Text.Trim(timeText),
-            // Split the string by spaces.
+            // Split the input on spaces.
             parts = Text.Split(trimmed, " "),
-            // First part is the date.
+            // Expect the first part to be the date, the second the time, and the third the numeric offset.
             datePart = parts{0},
-            // Second part is the time (with fractional seconds if any).
             timePart = parts{1},
-            // Third part should be the numeric offset (like "-0500").
             numericOffset = if List.Count(parts) >= 3 then parts{2} else "",
-            // If numericOffset is exactly 5 characters, insert a colon to get proper format ("-05:00").
+            // If numericOffset is 5 characters (e.g. "-0500"), insert a colon to get "-05:00".
             offsetFormatted = if Text.Length(numericOffset) = 5 then Text.Insert(numericOffset, 3, ":") else numericOffset,
-            // Combine date and time (without offset) into an ISO string.
+            // Combine date and time with a "T".
             isoBase = datePart & "T" & timePart,
-            // Parse the base datetime (without offset).
+            // Parse the base datetime (ignoring offset) as a datetime.
             dt = DateTime.FromText(isoBase),
-            // Convert offset to a number of hours.
-            offsetHours = if offsetFormatted <> "" then
-                             Number.From(Text.Start(offsetFormatted, 3)) + Number.From(Text.End(offsetFormatted, 2)) / 60
+            // Calculate offset in hours.
+            offsetHours = if offsetFormatted <> "" then 
+                             Number.From(Text.Start(offsetFormatted, 3)) + Number.From(Text.End(offsetFormatted, 2)) / 60 
                           else 0,
-            // Determine sign: if the offset string starts with "-", then sign = -1; otherwise, sign = 1.
+            // Determine sign based on offset.
             sign = if Text.StartsWith(offsetFormatted, "-") then -1 else 1,
-            // To convert from local (given offset) to UTC:
-            // If the offset is negative (e.g. "-05:00"), it means local time is 5 hours behind UTC, so add 5 hours.
-            // If the offset is positive, subtract the offset.
-            utcTime = if sign = -1 then dt + #duration(0, Abs(offsetHours), 0, 0)
-                      else dt - #duration(0, Abs(offsetHours), 0, 0)
+            // Adjust the parsed datetime to UTC.
+            utcTime = if sign = -1 then dt + #duration(0, Number.Abs(offsetHours), 0, 0)
+                      else dt - #duration(0, Number.Abs(offsetHours), 0, 0),
+            // Convert the UTC datetime to text in ISO8601 format (without fractional seconds).
+            utcText = DateTime.ToText(utcTime, "yyyy-MM-ddTHH:mm:ss")
         in
-            utcTime
+            // Parse the text as a DateTimeZone with Z (UTC) suffix.
+            DateTimeZone.FromText(utcText & "Z")
 in
     fnConvertTimeUTC
