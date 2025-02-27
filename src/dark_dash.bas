@@ -6,12 +6,13 @@ Option Explicit
 '  sheets, pivot tables, charts, slicers, and metrics.
 '***************************************************************
 
-' Dark theme color constants
-Const COLOR_BG As Long = RGB(46, 46, 46)          ' Dark background
-Const COLOR_TEXT As Long = RGB(230, 230, 230)       ' Light text
-Const COLOR_ACCENT As Long = RGB(0, 120, 215)       ' Accent (blue)
-Const COLOR_HIGHLIGHT As Long = RGB(255, 128, 0)    ' Highlight (orange)
+Option Explicit
 
+' Pre-calculated color constants (equivalent to the RGB values)
+Const COLOR_BG As Long = 3026478       ' Equivalent to RGB(46,46,46)
+Const COLOR_TEXT As Long = 15158550      ' Equivalent to RGB(230,230,230)
+Const COLOR_ACCENT As Long = 14120960    ' Equivalent to RGB(0,120,215)
+Const COLOR_HIGHLIGHT As Long = 33023    ' Equivalent to RGB(255,128,0)
 '-------------------------------
 ' Main setup procedure
 '-------------------------------
@@ -73,15 +74,25 @@ End Sub
 Private Sub SetupCaseLogTable()
     Dim wsLog As Worksheet
     Set wsLog = ThisWorkbook.Worksheets("CaseLog")
+    
     ' Add headers if row 1 is empty
     If Application.WorksheetFunction.CountA(wsLog.Rows(1)) = 0 Then
         wsLog.Range("A1:G1").Value = Array("CaseID", "Owner", "Category", "Status", "TimeCreated", "AssignedTime", "ResolvedTime")
     End If
+    
     Dim tbl As ListObject
-    On Error Resume Next
-    Set tbl = wsLog.ListObjects("tblCaseLog")
-    On Error GoTo 0
-    If tbl Is Nothing Then
+    ' Check if there is already any table on the sheet
+    If wsLog.ListObjects.Count > 0 Then
+        ' Assume the first table is our CaseLog table
+        Set tbl = wsLog.ListObjects(1)
+        ' Rename it if it's not already "tblCaseLog"
+        If tbl.Name <> "tblCaseLog" Then
+            On Error Resume Next
+            tbl.Name = "tblCaseLog"
+            On Error GoTo 0
+        End If
+    Else
+        ' If no table exists, create one
         Dim lastCol As Long, lastRow As Long
         lastCol = wsLog.Cells(1, wsLog.Columns.Count).End(xlToLeft).Column
         lastRow = wsLog.Cells(wsLog.Rows.Count, 1).End(xlUp).Row
@@ -91,6 +102,7 @@ Private Sub SetupCaseLogTable()
                    XlListObjectHasHeaders:=xlYes)
         tbl.Name = "tblCaseLog"
     End If
+    
     wsLog.Rows(1).Font.Bold = True
 End Sub
 
