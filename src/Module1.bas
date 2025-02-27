@@ -1,6 +1,8 @@
 ' Module: Module1.bas
 ' Description: Comprehensive module for tracking help cases and related metrics,
-' including automatic sheet initialization.
+' including automatic sheet initialization, case logging (both normal and missed cases),
+' and updating pending data. This version converts QuickEntry times to UTC by adding 7 hours,
+' so all times are stored in UTC.
 '
 ' Required sheets and headers:
 '   Data_Import:
@@ -17,7 +19,7 @@
 '     B1: "Last Updated" timestamp
 '
 '   Log:
-'     A: Timestamp, B: Event (created automatically if missing)
+'     A: Timestamp, B: Event (automatically added)
 
 Option Explicit
 
@@ -320,7 +322,7 @@ Sub AddHelpCase()
     Dim foundCell As Range, nextRow As Long
     Dim currentUTC As Date
     
-    ' Compute current time in UTC (convert Arizona local to UTC by adding 7 hours)
+    ' Compute current time in UTC by adding 7 hours to system (Arizona) time.
     currentUTC = DateAdd("h", 7, Now)
     
     Set wsData = ThisWorkbook.Worksheets("Data_Import")
@@ -356,7 +358,7 @@ Sub AddHelpCase()
                 wsLogSheet.Cells(nextRow, "A").Value = caseID
                 wsLogSheet.Cells(nextRow, "B").Value = ownerFromQuick
                 wsLogSheet.Cells(nextRow, "C").Value = "N/A"          ' TimeCreated not available
-                wsLogSheet.Cells(nextRow, "D").Value = currentUTC       ' QuickEntry Time in UTC
+                wsLogSheet.Cells(nextRow, "D").Value = currentUTC       ' QuickEntry Time (UTC)
                 wsLogSheet.Cells(nextRow, "E").Value = "Data pending"   ' TimeClosed not available
                 wsLogSheet.Cells(nextRow, "F").Value = noteText
                 wsLogSheet.Cells(nextRow, "G").Value = "Data pending"   ' MTTP not available
@@ -377,7 +379,7 @@ Sub AddHelpCase()
     
     wsLogSheet.Cells(nextRow, "A").Value = foundCell.Value                      ' CaseID
     wsLogSheet.Cells(nextRow, "B").Value = foundCell.Offset(0, 1).Value           ' Owner
-    wsLogSheet.Cells(nextRow, "C").Value = foundCell.Offset(0, 2).Value           ' TimeCreated (from Data_Import, UTC)
+    wsLogSheet.Cells(nextRow, "C").Value = foundCell.Offset(0, 2).Value           ' TimeCreated (from Data_Import, assumed UTC)
     wsLogSheet.Cells(nextRow, "D").Value = currentUTC                           ' QuickEntry Time (UTC)
     If IsDate(foundCell.Offset(0, 4).Value) Then
         wsLogSheet.Cells(nextRow, "E").Value = foundCell.Offset(0, 4).Value       ' TimeClosed
@@ -479,8 +481,7 @@ Sub UpdatePendingData()
     Dim pickupDelay As Double
     Dim currentUTC As Date
     
-    currentUTC = DateAdd("h", 7, Now)  ' Convert current system time from Arizona to UTC
-    
+    currentUTC = DateAdd("h", 7, Now)  ' Current system time converted to UTC
     Set wsData = ThisWorkbook.Worksheets("Data_Import")
     Set wsCaseLog = ThisWorkbook.Worksheets("CaseLog")
     lastRowCaseLog = wsCaseLog.Cells(wsCaseLog.Rows.Count, "A").End(xlUp).Row
@@ -497,9 +498,9 @@ Sub UpdatePendingData()
                     
                 Set foundCell = wsData.Range("A:A").Find(What:=caseID, LookIn:=xlValues, LookAt:=xlWhole)
                 If Not foundCell Is Nothing Then
-                    wsCaseLog.Cells(i, "C").Value = foundCell.Offset(0, 2).Value   ' Update TimeCreated (UTC)
+                    wsCaseLog.Cells(i, "C").Value = foundCell.Offset(0, 2).Value   ' TimeCreated from Data_Import (UTC)
                     If IsDate(foundCell.Offset(0, 4).Value) Then
-                        wsCaseLog.Cells(i, "E").Value = foundCell.Offset(0, 4).Value   ' Update TimeClosed
+                        wsCaseLog.Cells(i, "E").Value = foundCell.Offset(0, 4).Value   ' TimeClosed
                     Else
                         wsCaseLog.Cells(i, "E").Value = "Open"
                     End If
@@ -557,4 +558,53 @@ Sub UpdatePendingData()
     Else
         MsgBox "Update complete. " & updatedCount & " pending rows were updated with new data.", vbInformation, "Update Pending Data"
     End If
+End Sub
+
+' ******************************
+' Sub: AddMissedCase
+' Purpose: Quickly adds a missed case with default times.
+' ******************************
+Sub AddMissedCase()
+    Dim wsLog As Worksheet
+    Dim nextRow As Long
+    Dim caseID As String, noteText As String, ownerID As String
+    Dim pickupTime As Date, closedTime As Variant
+    Dim response As Variant
+    Dim currentUTC As Date
+    
+    ' Compute current UTC time from system (Arizona) time.
+    currentUTC = DateAdd("h", 7, Now)
+    
+    Set wsLog = ThisWorkbook.Worksheets("CaseLog")
+    
+    caseID = InputBox("Enter CaseID for the missed case:", "Missed Case Entry")
+    If caseID = "" Then Exit Sub
+    
+    ownerID = InputBox("Enter your Owner ID:", "Missed Case Entry")
+    noteText = InputBox("Enter any notes (optional):", "Missed Case Entry")
+    
+    ' Use current time (converted to UTC) as default pickup time; allow override.
+    pickupTime = currentUTC
+    response = InputBox("Enter pickup time (mm/dd/yyyy hh:mm) in UTC or leave blank:", "Missed Case Entry", Format(currentUTC, "mm/dd/yyyy hh:mm"))
+    If Trim(response) <> "" And IsDate(response) Then
+        pickupTime = CDate(response)
+    End If
+    
+    ' For missed cases, assume closed time is not available.
+    closedTime = "Open"
+    
+    nextRow = wsLog.Cells(wsLog.Rows.Count, "A").End(xlUp).Row + 1
+    wsLog.Cells(nextRow, "A").Value = caseID
+    wsLog.Cells(nextRow, "B").Value = ownerID
+    wsLog.Cells(nextRow, "C").Value = "N/A"          ' TimeCreated not available.
+    wsLog.Cells(nextRow, "D").Value = pickupTime      ' QuickEntry Time in UTC.
+    wsLog.Cells(nextRow, "E").Value = closedTime      ' TimeClosed.
+    wsLog.Cells(nextRow, "F").Value = noteText          ' Notes.
+    
+    ' Mark MTTP as "Backlogged" so you can filter these later.
+    wsLog.Cells(nextRow, "G").Value = "Backlogged"
+    ' Set Late Note Status to a default value.
+    wsLog.Cells(nextRow, "H").Value = "Pending"
+    
+    MsgBox "Missed case added with MTTP marked as 'Backlogged'.", vbInformation, "Missed Case Entry"
 End Sub
