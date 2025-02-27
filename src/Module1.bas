@@ -291,7 +291,7 @@ Function GetLastClosedTime(ownerID As String, currentPickupTime As Date) As Vari
     lastRow = wsData.Cells(wsData.Rows.Count, "B").End(xlUp).Row
     For Each cell In wsData.Range("B2:B" & lastRow)
         If LCase(cell.Value) = LCase(ownerID) Then
-            If IsDate(cell.Offset(0, 3).Value) Then  ' TimeClosed in column E
+            If IsDate(cell.Offset(0, 3).Value) Then  ' TimeClosed in column E (offset 3 from B)
                 currentDate = cell.Offset(0, 3).Value
                 If currentDate < currentPickupTime Then
                     If Not found Then
@@ -318,6 +318,10 @@ Sub AddHelpCase()
     Dim wsData As Worksheet, wsLogSheet As Worksheet, wsQuick As Worksheet
     Dim caseID As String, noteText As String, ownerFromQuick As String
     Dim foundCell As Range, nextRow As Long
+    Dim currentUTC As Date
+    
+    ' Compute current time in UTC (convert Arizona local to UTC by adding 7 hours)
+    currentUTC = DateAdd("h", 7, Now)
     
     Set wsData = ThisWorkbook.Worksheets("Data_Import")
     Set wsLogSheet = ThisWorkbook.Worksheets("CaseLog")
@@ -347,19 +351,19 @@ Sub AddHelpCase()
             UpdateDataImportFromCSV caseID
             Set foundCell = FindCaseInDataImport(caseID)
             If foundCell Is Nothing Then
-                ' CASE NOT FOUND: Add a placeholder row to the CaseLog
+                ' CASE NOT FOUND: Add a placeholder row to CaseLog
                 nextRow = wsLogSheet.Cells(wsLogSheet.Rows.Count, "A").End(xlUp).Row + 1
                 wsLogSheet.Cells(nextRow, "A").Value = caseID
                 wsLogSheet.Cells(nextRow, "B").Value = ownerFromQuick
                 wsLogSheet.Cells(nextRow, "C").Value = "N/A"          ' TimeCreated not available
-                wsLogSheet.Cells(nextRow, "D").Value = Now             ' QuickEntry Time
-                wsLogSheet.Cells(nextRow, "E").Value = "Data pending"  ' TimeClosed not available
+                wsLogSheet.Cells(nextRow, "D").Value = currentUTC       ' QuickEntry Time in UTC
+                wsLogSheet.Cells(nextRow, "E").Value = "Data pending"   ' TimeClosed not available
                 wsLogSheet.Cells(nextRow, "F").Value = noteText
-                wsLogSheet.Cells(nextRow, "G").Value = "Data pending"  ' MTTP not available
-                wsLogSheet.Cells(nextRow, "H").Value = "Data pending"  ' Late Note Status not available
-                wsLogSheet.Cells(nextRow, "I").Value = "Data pending"  ' MTTR not available
-                wsLogSheet.Cells(nextRow, "J").Value = "Data pending"  ' Spike Detection not available
-                wsLogSheet.Cells(nextRow, "K").Value = "Data pending"  ' Inter-case Gap not available
+                wsLogSheet.Cells(nextRow, "G").Value = "Data pending"   ' MTTP not available
+                wsLogSheet.Cells(nextRow, "H").Value = "Data pending"   ' Late Note Status not available
+                wsLogSheet.Cells(nextRow, "I").Value = "Data pending"   ' MTTR not available
+                wsLogSheet.Cells(nextRow, "J").Value = "Data pending"   ' Spike Detection not available
+                wsLogSheet.Cells(nextRow, "K").Value = "Data pending"   ' Inter-case Gap not available
                 MsgBox "Case " & caseID & " not found in Data_Import. Placeholder row added. Please update data later.", vbExclamation, "Case Not Found"
                 LogEvent "Case " & caseID & " placeholder added due to missing data."
                 ClearQuickEntry
@@ -373,8 +377,8 @@ Sub AddHelpCase()
     
     wsLogSheet.Cells(nextRow, "A").Value = foundCell.Value                      ' CaseID
     wsLogSheet.Cells(nextRow, "B").Value = foundCell.Offset(0, 1).Value           ' Owner
-    wsLogSheet.Cells(nextRow, "C").Value = foundCell.Offset(0, 2).Value           ' TimeCreated
-    wsLogSheet.Cells(nextRow, "D").Value = Now                                    ' QuickEntry Time
+    wsLogSheet.Cells(nextRow, "C").Value = foundCell.Offset(0, 2).Value           ' TimeCreated (from Data_Import, UTC)
+    wsLogSheet.Cells(nextRow, "D").Value = currentUTC                           ' QuickEntry Time (UTC)
     If IsDate(foundCell.Offset(0, 4).Value) Then
         wsLogSheet.Cells(nextRow, "E").Value = foundCell.Offset(0, 4).Value       ' TimeClosed
     Else
@@ -383,7 +387,7 @@ Sub AddHelpCase()
     wsLogSheet.Cells(nextRow, "F").Value = noteText                               ' Notes
     
     Dim pickupDelay As Double
-    pickupDelay = DateDiff("n", foundCell.Offset(0, 2).Value, Now)
+    pickupDelay = DateDiff("n", foundCell.Offset(0, 2).Value, currentUTC)
     wsLogSheet.Cells(nextRow, "G").Value = FormatMinutes(pickupDelay)
     
     If pickupDelay >= 30 Then
@@ -417,9 +421,9 @@ Sub AddHelpCase()
     
     Dim lastClosedTime As Variant
     If LCase(foundCell.Offset(0, 1).Value) = LCase(ownerFromQuick) Then
-        lastClosedTime = GetLastClosedTime(ownerFromQuick, Now)
+        lastClosedTime = GetLastClosedTime(ownerFromQuick, currentUTC)
         If IsDate(lastClosedTime) Then
-            wsLogSheet.Cells(nextRow, "K").Value = FormatMinutes(DateDiff("n", lastClosedTime, Now))
+            wsLogSheet.Cells(nextRow, "K").Value = FormatMinutes(DateDiff("n", lastClosedTime, currentUTC))
         Else
             wsLogSheet.Cells(nextRow, "K").Value = "N/A"
         End If
@@ -427,7 +431,7 @@ Sub AddHelpCase()
         wsLogSheet.Cells(nextRow, "K").Value = "N/A"
     End If
     
-    MsgBox "Case " & caseID & " logged successfully with a QuickEntry Time.", vbInformation, "Success"
+    MsgBox "Case " & caseID & " logged successfully with a QuickEntry Time in UTC.", vbInformation, "Success"
     LogEvent "Case " & caseID & " logged successfully."
     
     ClearQuickEntry
@@ -435,7 +439,7 @@ Sub AddHelpCase()
 End Sub
 
 ' ******************************
-' Late Note Checker Subroutine
+' Sub: CheckLateNotes
 ' ******************************
 Sub CheckLateNotes()
     Dim wsLog As Worksheet
@@ -464,7 +468,7 @@ Sub CheckLateNotes()
 End Sub
 
 ' ******************************
-' Update Pending Data
+' Sub: UpdatePendingData
 ' ******************************
 Sub UpdatePendingData()
     Dim wsData As Worksheet, wsCaseLog As Worksheet
@@ -473,17 +477,18 @@ Sub UpdatePendingData()
     Dim foundCell As Range
     Dim updatedCount As Long
     Dim pickupDelay As Double
+    Dim currentUTC As Date
+    
+    currentUTC = DateAdd("h", 7, Now)  ' Convert current system time from Arizona to UTC
     
     Set wsData = ThisWorkbook.Worksheets("Data_Import")
     Set wsCaseLog = ThisWorkbook.Worksheets("CaseLog")
     lastRowCaseLog = wsCaseLog.Cells(wsCaseLog.Rows.Count, "A").End(xlUp).Row
     updatedCount = 0
     
-    ' Loop through each row in CaseLog (starting at row 2, assuming headers in row 1)
     For i = 2 To lastRowCaseLog
         caseID = Trim(wsCaseLog.Cells(i, "A").Value)
         If caseID <> "" Then
-            ' Check if either TimeCreated (Column C) or TimeClosed (Column E) is blank or a placeholder
             If (Trim(UCase(wsCaseLog.Cells(i, "C").Value)) = "" Or _
                 Trim(UCase(wsCaseLog.Cells(i, "C").Value)) = "DATA PENDING" Or _
                 Trim(UCase(wsCaseLog.Cells(i, "C").Value)) = "N/A") Or _
@@ -492,21 +497,17 @@ Sub UpdatePendingData()
                     
                 Set foundCell = wsData.Range("A:A").Find(What:=caseID, LookIn:=xlValues, LookAt:=xlWhole)
                 If Not foundCell Is Nothing Then
-                    ' Update TimeCreated (Column C) from Data_Import's Column C
-                    wsCaseLog.Cells(i, "C").Value = foundCell.Offset(0, 2).Value
-                    ' Update TimeClosed (Column E) from Data_Import's Column E if available; else "Open"
+                    wsCaseLog.Cells(i, "C").Value = foundCell.Offset(0, 2).Value   ' Update TimeCreated (UTC)
                     If IsDate(foundCell.Offset(0, 4).Value) Then
-                        wsCaseLog.Cells(i, "E").Value = foundCell.Offset(0, 4).Value
+                        wsCaseLog.Cells(i, "E").Value = foundCell.Offset(0, 4).Value   ' Update TimeClosed
                     Else
                         wsCaseLog.Cells(i, "E").Value = "Open"
                     End If
                     
-                    ' Recalculate MTTP (Column G) if TimeCreated and QuickEntry Time (Column D) are valid dates
                     If IsDate(wsCaseLog.Cells(i, "C").Value) And IsDate(wsCaseLog.Cells(i, "D").Value) Then
                         wsCaseLog.Cells(i, "G").Value = FormatMinutes(DateDiff("n", wsCaseLog.Cells(i, "C").Value, wsCaseLog.Cells(i, "D").Value))
                     End If
                     
-                    ' Recalculate Late Note Status (Column H) based on MTTP
                     pickupDelay = DateDiff("n", wsCaseLog.Cells(i, "C").Value, wsCaseLog.Cells(i, "D").Value)
                     If pickupDelay >= 30 Then
                         If Len(Trim(wsCaseLog.Cells(i, "F").Value)) = 0 Then
@@ -518,21 +519,21 @@ Sub UpdatePendingData()
                         wsCaseLog.Cells(i, "H").Value = "On time"
                     End If
                     
-                    ' Recalculate MTTR (Column I) if both TimeCreated and TimeClosed are valid dates
                     If IsDate(wsCaseLog.Cells(i, "C").Value) And IsDate(wsCaseLog.Cells(i, "E").Value) Then
                         wsCaseLog.Cells(i, "I").Value = FormatMinutes(DateDiff("n", wsCaseLog.Cells(i, "C").Value, wsCaseLog.Cells(i, "E").Value))
+                    Else
+                        wsCaseLog.Cells(i, "I").Value = "Open"
                     End If
                     
-                    ' Recalculate Spike Detection (Column J) based on updated TimeCreated
                     Dim spikeCount As Long
                     spikeCount = GetSpikeCount(wsCaseLog.Cells(i, "C").Value)
                     If spikeCount >= 5 Then
                         wsCaseLog.Cells(i, "J").Value = "Spike Detected (" & spikeCount & " cases)"
+                        LogEvent "Spike detected around case " & caseID & " (" & spikeCount & " cases)"
                     Else
                         wsCaseLog.Cells(i, "J").Value = "No spike"
                     End If
                     
-                    ' Recalculate Inter-case Gap (Column K) for owner cases using QuickEntry Time (Column D)
                     Dim ownerInLog As String
                     ownerInLog = Trim(wsCaseLog.Cells(i, "B").Value)
                     Dim lastClosedTime As Variant
