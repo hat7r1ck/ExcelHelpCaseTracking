@@ -1,205 +1,213 @@
-' ============================================
-' MODULE: Advanced Dark Mode Dashboard
-' This module creates and manages a dark-themed Excel dashboard
-' with automation, pivot tables, and slicers for interactive analysis.
-' ============================================
-
 Option Explicit
 
-' Color Constants for Dark Mode
-Public Const COLOR_BG As Long = &H2E2E2E ' Dark gray background
-Public Const COLOR_TEXT As Long = &HE6E6E6 ' Light text
-Public Const COLOR_ACCENT As Long = &H0078D7 ' Blue accent
-Public Const COLOR_HIGHLIGHT As Long = &HFF8000 ' Orange highlight
-
-' ============================================
-' DASHBOARD SETUP - Initializes all sheets, pivots, and visuals
-' ============================================
-Public Sub SetupDashboard()
-    Dim ws As Worksheet
-    Dim sheetNames As Variant
-    sheetNames = Array("Dashboard", "CaseLog", "Jira", "ToDo", "Data_Import", "QuickEntry", "Log")
-
-    ' Create required sheets if they don't exist
-    For Each ws In ThisWorkbook.Worksheets
-        ApplyDarkTheme ws
-    Next ws
-
-    ' Ensure DashboardPivot exists (for PivotTables)
-    If Not SheetExists("DashboardPivot") Then
-        Set ws = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
-        ws.Name = "DashboardPivot"
-        ws.Visible = xlSheetHidden
-    End If
-
-    ' Setup dashboard elements
-    SetupQuickEntryForm
-    SetupCaseLogTable
-    SetupDashboardLayout
-    SetupPivotTables
-
-    LogEvent "Dashboard Setup Completed."
-    MsgBox "Dark Mode Dashboard Ready!", vbInformation, "Setup Complete"
-End Sub
-
-' ============================================
-' APPLY DARK MODE TO SHEETS
-' ============================================
-Private Sub ApplyDarkTheme(targetSheet As Worksheet)
-    With targetSheet.Cells
-        .Font.Color = COLOR_TEXT
-        .Interior.Color = COLOR_BG
-    End With
-    ' Hide gridlines for cleaner UI
-    If targetSheet.Name = "Dashboard" Then
-        ActiveWindow.DisplayGridlines = False
-    End If
-End Sub
-
-' ============================================
-' PIVOT TABLES & DATA VISUALIZATION
-' ============================================
-Private Sub SetupPivotTables()
-    Dim wsData As Worksheet, wsPivot As Worksheet
-    Dim ptCache As PivotCache, pt As PivotTable
-    Dim dataRange As Range
-
-    If Not SheetExists("CaseLog") Then Exit Sub
-    Set wsData = ThisWorkbook.Sheets("CaseLog")
-
-    On Error Resume Next
-    Set dataRange = wsData.Range("A1").CurrentRegion
-    On Error GoTo 0
-    If dataRange Is Nothing Then Exit Sub
-
-    Set wsPivot = ThisWorkbook.Sheets("DashboardPivot")
-    Set ptCache = ThisWorkbook.PivotCaches.Create(xlDatabase, dataRange)
-
-    ' Remove old pivot table if it exists
-    On Error Resume Next
-    wsPivot.PivotTables("Pivot_CaseLog").TableRange2.Clear
-    On Error GoTo 0
-
-    ' Create PivotTable
-    Set pt = wsPivot.PivotTables.Add(PivotCache:=ptCache, TableDestination:=wsPivot.Range("A1"), TableName:="Pivot_CaseLog")
-
-    ' Configure Pivot Fields
-    With pt
-        .PivotFields("TimeCreated").Orientation = xlRowField
-        .AddDataField .PivotFields("CaseID"), "CountCases", xlCount
-        .PivotFields("TimeCreated").NumberFormat = "yyyy-mm-dd"
-        .RowAxisLayout xlOutlineRow
-        .ColumnGrand = False: .RowGrand = False
-        .NullString = ""
-    End With
-
-    pt.TableStyle2 = "PivotStyleDark1"
-    LogEvent "PivotTables Initialized."
-End Sub
-
-' ============================================
-' INTERACTIVE ELEMENTS: SLICERS & TIMELINE
-' ============================================
-Private Sub SetupSlicers()
-    Dim ws As Worksheet, pt As PivotTable
-    Dim slicerCache As SlicerCache, slicer As Slicer
-
-    Set ws = ThisWorkbook.Sheets("Dashboard")
-    Set pt = ws.PivotTables("Pivot_CaseLog")
-
-    ' Remove old slicers
-    On Error Resume Next
-    ThisWorkbook.SlicerCaches("Owner").Delete
-    On Error GoTo 0
-
-    ' Create slicer
-    Set slicerCache = ThisWorkbook.SlicerCaches.Add(pt, pt.PivotFields("Owner"))
-    Set slicer = slicerCache.Slicers.Add(ws, , "Owner", "Owner", 100, 50, 200, 100)
-
-    slicer.Shape.Fill.ForeColor.RGB = COLOR_ACCENT
-End Sub
-
-' ============================================
-' DASHBOARD AUTOMATION
-' ============================================
-Public Sub RefreshDashboard()
-    On Error GoTo Cleanup
-
-    ' Optimize performance
+Public Sub CreateDarkModeDashboard()
+    Dim dashSheet As Worksheet, dataSheet As Worksheet, logSheet As Worksheet
+    Dim pvtCache As PivotCache, pvt As PivotTable
+    Dim chartObj As ChartObject
+    Dim slcCache As SlicerCache, slcObj As Slicer
+    Dim tlCache As SlicerCache, tlObj As Slicer
+    Dim lastRow As Long, lastCol As Long
+    
+    On Error GoTo ErrorHandler
     Application.ScreenUpdating = False
+    Application.EnableEvents = False
+    Application.DisplayAlerts = False
     Application.Calculation = xlCalculationManual
-    Application.StatusBar = "Refreshing..."
-
-    ' Refresh Data & Pivots
-    ThisWorkbook.RefreshAll
-    SetupPivotTables
-
-    ' Apply Date Filter
-    SetDefaultDateRange
-
-    ' Recalculate Metrics
-    CalculateMetrics
-
-    ' Finalize
-    Application.StatusBar = "Dashboard Updated"
-    LogEvent "Dashboard Refreshed."
-
-Cleanup:
-    Application.ScreenUpdating = True
-    Application.Calculation = xlCalculationAutomatic
-    Application.StatusBar = False
-End Sub
-
-' ============================================
-' DATE FILTERING & DEFAULT TIME RANGE
-' ============================================
-Private Sub SetDefaultDateRange()
-    Dim ws As Worksheet
-    Set ws = ThisWorkbook.Sheets("Dashboard")
-
-    ws.Range("EndDate").Value = Date
-    ws.Range("StartDate").Value = Date - 13
-
-    ApplyDateFilter
-End Sub
-
-Private Sub ApplyDateFilter()
-    Dim ws As Worksheet, pt As PivotTable, pf As PivotField
-    Dim startDate As Date, endDate As Date
-
-    Set ws = ThisWorkbook.Sheets("Dashboard")
-
-    startDate = ws.Range("StartDate").Value
-    endDate = ws.Range("EndDate").Value
-
-    For Each pt In ws.PivotTables
-        On Error Resume Next
-        Set pf = pt.PivotFields("TimeCreated")
-        On Error GoTo 0
-        If Not pf Is Nothing Then
-            pf.ClearAllFilters
-            pf.PivotFilters.Add2 Type:=xlDateBetween, Value1:=startDate, Value2:=endDate
-        End If
-    Next pt
-End Sub
-
-' ============================================
-' LOGGING & UTILITY FUNCTIONS
-' ============================================
-Private Sub LogEvent(message As String)
-    Dim ws As Worksheet, nextRow As Long
-    Set ws = ThisWorkbook.Sheets("Log")
-    nextRow = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row + 1
-
-    ws.Cells(nextRow, 1).Value = Now
-    ws.Cells(nextRow, 2).Value = message
-    ws.Columns.AutoFit
-End Sub
-
-Function SheetExists(sheetName As String) As Boolean
-    Dim ws As Worksheet
+    
+    ' **1. Create/Reference required sheets** 
+    ' Data Sheet
+    Set dataSheet = Nothing
     On Error Resume Next
-    Set ws = ThisWorkbook.Sheets(sheetName)
-    SheetExists = Not ws Is Nothing
-    On Error GoTo 0
-End Function
+    Set dataSheet = ThisWorkbook.Worksheets("Data")
+    On Error GoTo ErrorHandler
+    If dataSheet Is Nothing Then
+        Set dataSheet = ThisWorkbook.Worksheets.Add(Before:=ThisWorkbook.Sheets(1))
+        dataSheet.Name = "Data"
+    End If
+    ' Dashboard Sheet
+    Set dashSheet = Nothing
+    On Error Resume Next
+    Set dashSheet = ThisWorkbook.Worksheets("Dashboard")
+    On Error GoTo ErrorHandler
+    If dashSheet Is Nothing Then
+        Set dashSheet = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
+        dashSheet.Name = "Dashboard"
+    End If
+    ' Apply dark theme to entire Dashboard sheet
+    dashSheet.Cells.Font.Color = RGB(240, 240, 240)     ' light font
+    dashSheet.Cells.Interior.Color = RGB(45, 45, 48)    ' dark background
+    dashSheet.Tab.Color = RGB(60, 60, 60)               ;' optional: dark tab color
+    
+    ' Log Sheet
+    Set logSheet = Nothing
+    On Error Resume Next
+    Set logSheet = ThisWorkbook.Worksheets("Log")
+    On Error GoTo ErrorHandler
+    If logSheet Is Nothing Then
+        Set logSheet = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
+        logSheet.Name = "Log"
+        ' Initialize log headers
+        logSheet.Range("A1:B1").Value = Array("Timestamp", "Event")
+    End If
+    
+    ' **2. Refresh data connections (ensure Data sheet is up-to-date)** 
+    ThisWorkbook.RefreshAll
+    ' (Optionally, wait for refresh to complete if asynchronous)
+    Application.Wait (Now + TimeValue("0:00:01"))  ' small pause to allow refresh
+    LogEvent logSheet, "Data connections refreshed"
+    
+    ' If data is not in a table, define the used range or convert to table
+    With dataSheet
+        If .UsedRange.Count > 1 Then  ' if there's data
+            lastRow = .Cells.Find("*", SearchOrder:=xlByRows, SearchDirection:=xlPrevious).Row
+            lastCol = .Cells.Find("*", SearchOrder:=xlByColumns, SearchDirection:=xlPrevious).Column
+        Else
+            lastRow = 1
+            lastCol = 1
+        End If
+        Dim dataRange As Range
+        Set dataRange = .Range(.Cells(1, 1), .Cells(lastRow, lastCol))
+        ' Convert to Table (ListObject) if not already a table
+        Dim dataTbl As ListObject
+        On Error Resume Next
+        Set dataTbl = .ListObjects("DataTable")
+        On Error GoTo ErrorHandler
+        If dataTbl Is Nothing Then
+            If lastRow > 1 Or lastCol > 1 Then  ' if actual data exists beyond a single cell
+                Set dataTbl = .ListObjects.Add(xlSrcRange, dataRange, , xlYes)
+            Else
+                ' Create an empty table with headers if only one cell (no data yet)
+                .Cells(1, 1).Value = "DataHeader"
+                Set dataTbl = .ListObjects.Add(xlSrcRange, .Range("A1:A2"), , xlYes)
+                dataTbl.DataBodyRange.Delete  ' remove the dummy row
+            End If
+            dataTbl.Name = "DataTable"
+        End If
+        ' Ensure the named range "DataRange" refers to the full table data for backward compatibility
+        On Error Resume Next
+        ThisWorkbook.Names.Add Name:="DataRange", RefersTo:=dataTbl.Range
+        On Error GoTo ErrorHandler
+    End With
+    
+    ' **3. Create or Update Pivot Table on Dashboard** 
+    On Error Resume Next
+    Set pvt = dashSheet.PivotTables("DashboardPivot")
+    On Error GoTo ErrorHandler
+    If pvt Is Nothing Then
+        ' Create new PivotCache from the data table 
+        Set pvtCache = ThisWorkbook.PivotCaches.Create(xlDatabase, "DataTable", xlPivotTableVersion15)
+        ' Create PivotTable on Dashboard sheet starting at cell A5
+        Set pvt = pvtCache.CreatePivotTable(TableDestination:=dashSheet.Range("A5"), TableName:="DashboardPivot")
+        ' Add fields to PivotTable
+        pvt.ManualUpdate = True  ' defer updates for performance
+        On Error Resume Next
+        pvt.PivotFields("Category").Orientation = xlRowField
+        pvt.PivotFields("Category").Position = 1
+        pvt.PivotFields("Value").Orientation = xlDataField
+        pvt.PivotFields("Value").Function = xlSum
+        On Error GoTo 0
+        pvt.ManualUpdate = False  ' now apply the changes
+    Else
+        ' Pivot exists – just refresh its cache to update data
+        Set pvtCache = pvt.PivotCache
+        pvtCache.Refresh
+    End If
+    ' PivotTable formatting and options
+    If Not pvt Is Nothing Then
+        pvt.PivotCache.EnableRefresh = True
+        pvt.PreserveFormatting = True        ' preserve dark formatting on refresh [oai_citation_attribution:2‡learn.microsoft.com](https://learn.microsoft.com/en-us/office/vba/api/excel.pivottable.preserveformatting#:~:text=True%20if%20formatting%20is%20preserved,or%20changing%20page%20field%20items)
+        pvt.TableStyle2 = "PivotStyleDark1"   ' apply a dark pivot table style
+        pvt.ColumnGrand = True: pvt.RowGrand = True  ' show totals (if needed)
+        pvt.HasAutoFormat = False            ' prevent auto-formatting override
+        pvt.DisplayErrorString = True: pvt.ErrorString = "–"  ' handle errors in data display
+    End If
+    
+    ' **4. Create or Update Pivot Chart** 
+    On Error Resume Next
+    Set chartObj = dashSheet.ChartObjects("SalesChart")
+    On Error GoTo ErrorHandler
+    If chartObj Is Nothing Then
+        Set chartObj = dashSheet.ChartObjects.Add(Left:=300, Top:=50, Width:=500, Height:=300)
+        chartObj.Name = "SalesChart"
+    End If
+    With chartObj.Chart
+        .SetSourceData Source:=pvt.TableRange2   ' link chart to entire pivot table range
+        .ChartType = xlColumnClustered
+        ' Apply dark theme to chart elements
+        .ChartArea.Format.Fill.ForeColor.RGB = RGB(45, 45, 48)
+        .PlotArea.Format.Fill.ForeColor.RGB = RGB(45, 45, 48)
+        .ChartArea.Format.Line.Visible = msoFalse
+        ' Format chart title
+        .HasTitle = True
+        .ChartTitle.Text = "Sales by Category"
+        .ChartTitle.Font.Color = RGB(240, 240, 240)
+        ' Format axes and legend
+        If .HasLegend Then .Legend.Format.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(240, 240, 240)
+        On Error Resume Next
+        .Axes(xlCategory).TickLabels.Font.Color = RGB(240, 240, 240)
+        .Axes(xlValue).TickLabels.Font.Color = RGB(240, 240, 240)
+        On Error GoTo 0
+        .Refresh   ' ensure the chart displays the latest pivot data
+    End With
+    
+    ' **5. Create or Update Slicer and Timeline** 
+    ' Slicer for Category field
+    On Error Resume Next
+    Set slcCache = ThisWorkbook.SlicerCaches("Slicer_Category")
+    On Error GoTo ErrorHandler
+    If slcCache Is Nothing Then
+        ' Add slicer cache for the pivot field "Category"
+        Set slcCache = ThisWorkbook.SlicerCaches.Add(pvt, "Category", "Slicer_Category", xlSlicer)
+        ' Add the slicer to the dashboard sheet
+        Set slcObj = slcCache.Slicers.Add(dashSheet, , "Slicer_Category", "Category", dashSheet.Range("H5"))
+        slcObj.Style = "SlicerStyleDark1"  ' apply dark style to slicer
+    Else
+        ' If slicer exists, ensure it still points to the current pivot (it should if cache reused)
+        Set slcObj = slcCache.Slicers(1)
+    End If
+    ' Timeline slicer for Date field (if exists in pivot)
+    On Error Resume Next
+    If Not pvt.PivotFields("Date") Is Nothing Then
+        Set tlCache = ThisWorkbook.SlicerCaches("Timeline_Date")
+        On Error GoTo ErrorHandler
+        If tlCache Is Nothing Then
+            Set tlCache = ThisWorkbook.SlicerCaches.Add(pvt, "Date", "Timeline_Date", xlTimeline)
+            Set tlObj = tlCache.Slicers.Add(dashSheet, , "Timeline_Date", "Date", dashSheet.Range("H15"))
+            tlObj.Style = "TimeSlicerStyleDark1"  ' apply dark style to timeline
+        End If
+    End If
+    On Error GoTo ErrorHandler  ' reset error handling
+    
+    ' **6. Log completion event** 
+    LogEvent logSheet, "Dashboard updated successfully"
+    
+    ' **7. Restore Excel settings and exit** 
+    Application.ScreenUpdating = True
+    Application.EnableEvents = True
+    Application.DisplayAlerts = True
+    Application.Calculation = xlCalculationAutomatic
+    Exit Sub
+
+ErrorHandler:
+    ' Handle errors: log and alert the user
+    Dim errMsg As String
+    errMsg = "Error " & Err.Number & ": " & Err.Description
+    If Not logSheet Is Nothing Then
+        LogEvent logSheet, errMsg
+    End If
+    MsgBox errMsg, vbCritical, "Dashboard Module Error"
+    ' Restore settings even if there is an error
+    Application.ScreenUpdating = True
+    Application.EnableEvents = True
+    Application.DisplayAlerts = True
+    Application.Calculation = xlCalculationAutomatic
+End Sub
+
+' Helper subroutine for logging events to the Log sheet
+Private Sub LogEvent(ws As Worksheet, msg As String)
+    On Error Resume Next
+    Dim lr As Long
+    lr = ws.Cells(ws.Rows.Count, "A").End(xlUp).Row + 1
+    ws.Cells(lr, "A").Value = Now    ' Timestamp
+    ws.Cells(lr, "B").Value = msg   ' Event message
+End Sub
