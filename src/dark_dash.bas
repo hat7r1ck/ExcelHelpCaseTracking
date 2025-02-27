@@ -20,33 +20,63 @@ Public Sub SetupDashboard()
     Dim ws As Worksheet
     Dim sheetNames As Variant, nm As Variant
     Dim wsPivot As Worksheet
+    Dim found As Boolean
+    Dim sh As Worksheet
     
-    ' Create required sheets if they don't exist
+    ' Check if the workbook structure is protected
+    If ThisWorkbook.ProtectStructure Then
+        MsgBox "Workbook structure is protected. Please unprotect the workbook and try again.", vbCritical
+        Exit Sub
+    End If
+    
+    ' List of required sheet names
     sheetNames = Array("Dashboard", "CaseLog", "Jira", "ToDo", "Data_Import", "QuickEntry", "Log")
     For Each nm In sheetNames
-        On Error Resume Next
-        Set ws = ThisWorkbook.Worksheets(CStr(nm))
-        On Error GoTo 0
-        If ws Is Nothing Then
-            Set ws = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
+        found = False
+        ' Loop through existing worksheets to check for a match
+        For Each sh In ThisWorkbook.Worksheets
+            If sh.Name = CStr(nm) Then
+                Set ws = sh
+                found = True
+                Exit For
+            End If
+        Next sh
+        
+        ' If not found, add a new sheet and name it
+        If Not found Then
+            Set ws = ThisWorkbook.Sheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
+            On Error Resume Next
             ws.Name = CStr(nm)
+            On Error GoTo 0
+        Else
+            ' If found, ensure the sheet is visible
+            ws.Visible = xlSheetVisible
         End If
+        
+        ' Apply dark theme formatting
         ApplyDarkTheme ws
         Set ws = Nothing
     Next nm
     
-    ' Create hidden sheet for pivot tables if not present
-    On Error Resume Next
-    Set wsPivot = ThisWorkbook.Worksheets("DashboardPivot")
-    On Error GoTo 0
+    ' Create or find the hidden pivot sheet "DashboardPivot"
+    Set wsPivot = Nothing
+    For Each sh In ThisWorkbook.Worksheets
+        If sh.Name = "DashboardPivot" Then
+            Set wsPivot = sh
+            Exit For
+        End If
+    Next sh
+    
     If wsPivot Is Nothing Then
-        Set wsPivot = ThisWorkbook.Worksheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
+        Set wsPivot = ThisWorkbook.Sheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
+        On Error Resume Next
         wsPivot.Name = "DashboardPivot"
-        wsPivot.Visible = xlSheetHidden
+        On Error GoTo 0
     End If
+    wsPivot.Visible = xlSheetHidden
     ApplyDarkTheme wsPivot
     
-    ' Set up supporting sheets and elements
+    ' Set up additional sheets/forms/layouts
     SetupQuickEntryForm
     SetupCaseLogTable
     SetupDashboardLayout
