@@ -481,7 +481,8 @@ Sub UpdatePendingData()
     Dim pickupDelay As Double
     Dim currentUTC As Date
     
-    currentUTC = DateAdd("h", 7, Now)  ' Current system time converted to UTC
+    currentUTC = DateAdd("h", 7, Now)  ' Current system time (Arizona) converted to UTC
+    
     Set wsData = ThisWorkbook.Worksheets("Data_Import")
     Set wsCaseLog = ThisWorkbook.Worksheets("CaseLog")
     lastRowCaseLog = wsCaseLog.Cells(wsCaseLog.Rows.Count, "A").End(xlUp).Row
@@ -490,6 +491,7 @@ Sub UpdatePendingData()
     For i = 2 To lastRowCaseLog
         caseID = Trim(wsCaseLog.Cells(i, "A").Value)
         If caseID <> "" Then
+            ' Check if either TimeCreated (Column C) or TimeClosed (Column E) is blank or a placeholder
             If (Trim(UCase(wsCaseLog.Cells(i, "C").Value)) = "" Or _
                 Trim(UCase(wsCaseLog.Cells(i, "C").Value)) = "DATA PENDING" Or _
                 Trim(UCase(wsCaseLog.Cells(i, "C").Value)) = "N/A") Or _
@@ -498,13 +500,21 @@ Sub UpdatePendingData()
                     
                 Set foundCell = wsData.Range("A:A").Find(What:=caseID, LookIn:=xlValues, LookAt:=xlWhole)
                 If Not foundCell Is Nothing Then
-                    wsCaseLog.Cells(i, "C").Value = foundCell.Offset(0, 2).Value   ' TimeCreated from Data_Import (UTC)
+                    ' *** Update Owner (Column B) if it differs from Data_Import ***
+                    If Trim(wsCaseLog.Cells(i, "B").Value) <> Trim(foundCell.Offset(0, 1).Value) Then
+                        wsCaseLog.Cells(i, "B").Value = foundCell.Offset(0, 1).Value
+                    End If
+                    
+                    ' Update TimeCreated (Column C) from Data_Import's Column C (assumed to be in UTC)
+                    wsCaseLog.Cells(i, "C").Value = foundCell.Offset(0, 2).Value
+                    ' Update TimeClosed (Column E) from Data_Import's Column E if available; else "Open"
                     If IsDate(foundCell.Offset(0, 4).Value) Then
-                        wsCaseLog.Cells(i, "E").Value = foundCell.Offset(0, 4).Value   ' TimeClosed
+                        wsCaseLog.Cells(i, "E").Value = foundCell.Offset(0, 4).Value
                     Else
                         wsCaseLog.Cells(i, "E").Value = "Open"
                     End If
                     
+                    ' Recalculate MTTP (Column G) if TimeCreated (C) and QuickEntry Time (D) are valid dates
                     If IsDate(wsCaseLog.Cells(i, "C").Value) And IsDate(wsCaseLog.Cells(i, "D").Value) Then
                         wsCaseLog.Cells(i, "G").Value = FormatMinutes(DateDiff("n", wsCaseLog.Cells(i, "C").Value, wsCaseLog.Cells(i, "D").Value))
                     End If
@@ -520,6 +530,7 @@ Sub UpdatePendingData()
                         wsCaseLog.Cells(i, "H").Value = "On time"
                     End If
                     
+                    ' Recalculate MTTR (Column I) if both TimeCreated (C) and TimeClosed (E) are valid dates
                     If IsDate(wsCaseLog.Cells(i, "C").Value) And IsDate(wsCaseLog.Cells(i, "E").Value) Then
                         wsCaseLog.Cells(i, "I").Value = FormatMinutes(DateDiff("n", wsCaseLog.Cells(i, "C").Value, wsCaseLog.Cells(i, "E").Value))
                     Else
