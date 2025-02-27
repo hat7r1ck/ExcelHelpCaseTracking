@@ -1,21 +1,17 @@
 Option Explicit
 
-'***************************************************************
-'  Dark Mode Dashboard Module – Revised Version
-'  This module sets up a dark-themed dashboard with automated
-'  sheets, pivot tables, charts, slicers, and metrics.
-'***************************************************************
-
-Option Explicit
-
-' Pre-calculated color constants (equivalent to the RGB values)
+' Original theme color constants (pre-calculated)
 Const COLOR_BG As Long = 3026478       ' Equivalent to RGB(46,46,46)
 Const COLOR_TEXT As Long = 15158550      ' Equivalent to RGB(230,230,230)
 Const COLOR_ACCENT As Long = 14120960    ' Equivalent to RGB(0,120,215)
 Const COLOR_HIGHLIGHT As Long = 33023    ' Equivalent to RGB(255,128,0)
-'-------------------------------
-' Main setup procedure
-'-------------------------------
+
+'***************************************************************
+' Advanced Dark Mode Dashboard Module (Original Theme)
+' This module creates and manages a dashboard using your original
+' theme colors.
+'***************************************************************
+
 Public Sub SetupDashboard()
     Dim ws As Worksheet
     Dim sheetNames As Variant, nm As Variant
@@ -23,17 +19,16 @@ Public Sub SetupDashboard()
     Dim found As Boolean
     Dim sh As Worksheet
     
-    ' Check if the workbook structure is protected
+    ' Check if workbook structure is protected
     If ThisWorkbook.ProtectStructure Then
-        MsgBox "Workbook structure is protected. Please unprotect the workbook and try again.", vbCritical
+        MsgBox "Workbook structure is protected. Please unprotect it and try again.", vbCritical
         Exit Sub
     End If
     
-    ' List of required sheet names
+    ' List of required sheets
     sheetNames = Array("Dashboard", "CaseLog", "Jira", "ToDo", "Data_Import", "QuickEntry", "Log")
     For Each nm In sheetNames
         found = False
-        ' Loop through existing worksheets to check for a match
         For Each sh In ThisWorkbook.Worksheets
             If sh.Name = CStr(nm) Then
                 Set ws = sh
@@ -41,19 +36,14 @@ Public Sub SetupDashboard()
                 Exit For
             End If
         Next sh
-        
-        ' If not found, add a new sheet and name it
         If Not found Then
             Set ws = ThisWorkbook.Sheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
             On Error Resume Next
             ws.Name = CStr(nm)
             On Error GoTo 0
         Else
-            ' If found, ensure the sheet is visible
             ws.Visible = xlSheetVisible
         End If
-        
-        ' Apply dark theme formatting
         ApplyDarkTheme ws
         Set ws = Nothing
     Next nm
@@ -66,7 +56,6 @@ Public Sub SetupDashboard()
             Exit For
         End If
     Next sh
-    
     If wsPivot Is Nothing Then
         Set wsPivot = ThisWorkbook.Sheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
         On Error Resume Next
@@ -83,24 +72,18 @@ Public Sub SetupDashboard()
     LogEvent "Dashboard setup completed."
 End Sub
 
-'-------------------------------
-' Apply dark theme formatting to a sheet
-'-------------------------------
 Private Sub ApplyDarkTheme(targetSheet As Worksheet)
     With targetSheet.Cells
         .Interior.Color = COLOR_BG
         .Font.Color = COLOR_TEXT
     End With
-    ' For Dashboard sheet, hide gridlines
+    ' For the Dashboard sheet, hide gridlines for a cleaner look.
     If targetSheet.Name = "Dashboard" Then
         targetSheet.Activate
         ActiveWindow.DisplayGridlines = False
     End If
 End Sub
 
-'-------------------------------
-' Create or update CaseLog table
-'-------------------------------
 Private Sub SetupCaseLogTable()
     Dim wsLog As Worksheet
     Set wsLog = ThisWorkbook.Worksheets("CaseLog")
@@ -111,34 +94,27 @@ Private Sub SetupCaseLogTable()
     End If
     
     Dim tbl As ListObject
-    ' Check if there is already any table on the sheet
+    ' Use existing table if available
     If wsLog.ListObjects.Count > 0 Then
-        ' Assume the first table is our CaseLog table
         Set tbl = wsLog.ListObjects(1)
-        ' Rename it if it's not already "tblCaseLog"
         If tbl.Name <> "tblCaseLog" Then
             On Error Resume Next
             tbl.Name = "tblCaseLog"
             On Error GoTo 0
         End If
     Else
-        ' If no table exists, create one
         Dim lastCol As Long, lastRow As Long
         lastCol = wsLog.Cells(1, wsLog.Columns.Count).End(xlToLeft).Column
         lastRow = wsLog.Cells(wsLog.Rows.Count, 1).End(xlUp).Row
         If lastRow < 2 Then lastRow = 2
         Set tbl = wsLog.ListObjects.Add(SourceType:=xlSrcRange, _
-                   Source:=wsLog.Range(wsLog.Cells(1, 1), wsLog.Cells(lastRow, lastCol)), _
-                   XlListObjectHasHeaders:=xlYes)
+                    Source:=wsLog.Range(wsLog.Cells(1, 1), wsLog.Cells(lastRow, lastCol)), _
+                    XlListObjectHasHeaders:=xlYes)
         tbl.Name = "tblCaseLog"
     End If
-    
     wsLog.Rows(1).Font.Bold = True
 End Sub
 
-'-------------------------------
-' Set up QuickEntry sheet
-'-------------------------------
 Private Sub SetupQuickEntryForm()
     Dim wsQE As Worksheet
     Set wsQE = ThisWorkbook.Worksheets("QuickEntry")
@@ -154,9 +130,6 @@ Private Sub SetupQuickEntryForm()
     On Error GoTo 0
 End Sub
 
-'-------------------------------
-' Set up Dashboard layout with metric placeholders
-'-------------------------------
 Private Sub SetupDashboardLayout()
     Dim wsDash As Worksheet
     Set wsDash = ThisWorkbook.Worksheets("Dashboard")
@@ -174,9 +147,6 @@ Private Sub SetupDashboardLayout()
     wsDash.Range("B1:B4").Value = "N/A"
 End Sub
 
-'-------------------------------
-' Refresh dashboard: update data, pivots, charts, and metrics
-'-------------------------------
 Public Sub RefreshDashboard()
     On Error GoTo Cleanup
     Application.ScreenUpdating = False
@@ -190,7 +160,7 @@ Public Sub RefreshDashboard()
     SetDefaultTimeline
     CalculateMetrics
     
-    Application.StatusBar = "Dashboard updated at " & Format(Now, "hh:nn:ss")
+    Application.StatusBar = "Dashboard updated at " & Format(Now, "hh:mm:ss")
     LogEvent "Dashboard refreshed successfully."
     
 Cleanup:
@@ -200,9 +170,6 @@ Cleanup:
     Application.StatusBar = False
 End Sub
 
-'-------------------------------
-' Create or refresh pivot tables, charts, and slicers
-'-------------------------------
 Private Sub UpdatePivotTablesAndCharts()
     Dim wsPivot As Worksheet, wsDash As Worksheet
     Dim pc As PivotCache
@@ -279,9 +246,6 @@ Private Sub UpdatePivotTablesAndCharts()
     End If
 End Sub
 
-'-------------------------------
-' Create a pivot chart with dark formatting
-'-------------------------------
 Private Sub CreatePivotChart(pivotTbl As PivotTable, targetSheet As Worksheet, chartName As String, chartType As XlChartType, _
                               Left As Double, Top As Double, Width As Double, Height As Double, Optional title As String = "")
     Dim chtObj As ChartObject
@@ -305,9 +269,6 @@ Private Sub CreatePivotChart(pivotTbl As PivotTable, targetSheet As Worksheet, c
     End With
 End Sub
 
-'-------------------------------
-' Create a slicer for a pivot field
-'-------------------------------
 Private Sub CreatePivotSlicer(targetSheet As Worksheet, pivotTbl As PivotTable, fieldName As String, _
                                Left As Double, Top As Double, Width As Double, Height As Double)
     Dim slicerCache As SlicerCache
@@ -316,9 +277,6 @@ Private Sub CreatePivotSlicer(targetSheet As Worksheet, pivotTbl As PivotTable, 
     slicerCache.Slicers(1).Style = "SlicerStyleDark1"
 End Sub
 
-'-------------------------------
-' Create a timeline slicer for a date field
-'-------------------------------
 Private Sub CreateTimelineSlicer(targetSheet As Worksheet, pivotTbl As PivotTable, dateFieldName As String, _
                                   Left As Double, Top As Double, Width As Double, Height As Double)
     Dim slicerCache As SlicerCache
@@ -326,9 +284,6 @@ Private Sub CreateTimelineSlicer(targetSheet As Worksheet, pivotTbl As PivotTabl
     slicerCache.Slicers.Add SlicerDestination:=targetSheet, Left:=Left, Top:=Top, Width:=Width, Height:=Height
 End Sub
 
-'-------------------------------
-' Set timeline slicer filter to the last 14 days
-'-------------------------------
 Private Sub SetDefaultTimeline()
     On Error Resume Next
     Dim sc As SlicerCache
@@ -343,9 +298,6 @@ Private Sub SetDefaultTimeline()
     On Error GoTo 0
 End Sub
 
-'-------------------------------
-' Calculate and update dashboard metrics
-'-------------------------------
 Private Sub CalculateMetrics()
     Dim wsLog As Worksheet, wsDash As Worksheet
     Set wsLog = Worksheets("CaseLog")
@@ -433,9 +385,6 @@ Private Sub CalculateMetrics()
     End If
 End Sub
 
-'-------------------------------
-' Toggle visibility of a Dashboard element (chart, slicer, etc.)
-'-------------------------------
 Public Sub ToggleElement(elementName As String)
     Dim wsDash As Worksheet: Set wsDash = Worksheets("Dashboard")
     Dim shp As Shape
@@ -450,9 +399,6 @@ Public Sub ToggleElement(elementName As String)
     End If
 End Sub
 
-'-------------------------------
-' Log events in the Log sheet with a timestamp
-'-------------------------------
 Private Sub LogEvent(message As String)
     Dim wsLog As Worksheet: Set wsLog = Worksheets("Log")
     Dim nextRow As Long
@@ -460,6 +406,7 @@ Private Sub LogEvent(message As String)
     If nextRow < 2 Then nextRow = 2
     wsLog.Cells(nextRow, 1).Value = Now
     wsLog.Cells(nextRow, 2).Value = message
-    wsLog.Cells(nextRow, 1).NumberFormat = "yyyy-mm-dd hh:nn:ss"
-    wsLog.Columns(1).AutoFit: wsLog.Columns(2).AutoFit
+    wsLog.Cells(nextRow, 1).NumberFormat = "yyyy-mm-dd hh:mm:ss"
+    wsLog.Columns(1).AutoFit
+    wsLog.Columns(2).AutoFit
 End Sub
