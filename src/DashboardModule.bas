@@ -80,22 +80,31 @@ End Sub
 '==============================
 Public Sub ConsolidateData()
     Dim wb As Workbook: Set wb = ThisWorkbook
-    Dim wsData As Worksheet: Set wsData = wb.Sheets(SHEET_DATA)
+    Dim wsData As Worksheet
     Dim wsSource As Worksheet
     Dim sourceSheets As Variant
     Dim lastRowData As Long, lastRowSource As Long
-    Dim headerRow As Range
+    Dim numCols As Long
     Dim shtName As Variant
+    
+    ' Ensure DashboardData sheet exists
+    On Error Resume Next
+    Set wsData = wb.Sheets(SHEET_DATA)
+    On Error GoTo 0
+    If wsData Is Nothing Then
+        MsgBox "The '" & SHEET_DATA & "' sheet was not found. Please run SetupDashboardEnvironment first.", vbCritical
+        Exit Sub
+    End If
     
     sourceSheets = Array(SHEET_CASELOG, SHEET_JIRA, SHEET_TODO)
     
-    ' Clear existing data
+    ' Clear existing data in DashboardData
     wsData.Cells.Clear
     
     ' Copy header row from the first source sheet
     Set wsSource = wb.Sheets(sourceSheets(0))
-    Set headerRow = wsSource.Range("A1").CurrentRegion.Rows(1)
-    headerRow.Copy Destination:=wsData.Range("A1")
+    numCols = wsSource.Cells(1, wsSource.Columns.Count).End(xlToLeft).Column
+    wsSource.Range(wsSource.Cells(1, 1), wsSource.Cells(1, numCols)).Copy Destination:=wsData.Range("A1")
     lastRowData = 1  ' Start after header
     
     ' Append data from each source sheet
@@ -103,7 +112,7 @@ Public Sub ConsolidateData()
         Set wsSource = wb.Sheets(shtName)
         lastRowSource = wsSource.Cells(wsSource.Rows.Count, "A").End(xlUp).Row
         If lastRowSource > 1 Then
-            wsSource.Range("A2", wsSource.Cells(lastRowSource, headerRow.Columns.Count)).Copy _
+            wsSource.Range(wsSource.Cells(2, 1), wsSource.Cells(lastRowSource, numCols)).Copy _
                 Destination:=wsData.Cells(lastRowData + 1, 1)
             lastRowData = wsData.Cells(wsData.Rows.Count, "A").End(xlUp).Row
         End If
@@ -142,7 +151,10 @@ Public Sub CreatePivotDashboard()
         dataRange.Address(ReferenceStyle:=xlR1C1, External:=True))
     Set pt = ptCache.CreatePivotTable(TableDestination:=wsDash.Range("D10"), TableName:=PT_NAME)
     
-    ' Configure pivot fields: Use "TimeCreated" in Rows, "Status" in Columns, count of "CaseID" as data.
+    ' Configure pivot fields:
+    ' Use "TimeCreated" as Row field (assumes that header exists),
+    ' "Status" as Column field,
+    ' and count "CaseID" as the data field.
     With pt
         On Error Resume Next
         .PivotFields("TimeCreated").Orientation = xlRowField
@@ -164,8 +176,6 @@ End Sub
 '==============================
 ' CreatePivotChart
 ' Creates a PivotChart based on a given PivotTable.
-' Parameters: pt (PivotTable), wsDash (Dashboard sheet), chartName, chartType,
-'             DLeft, DTop, DWidth, DHeight (position/dimensions), ChartTitle.
 '==============================
 Private Sub CreatePivotChart(pt As PivotTable, wsDash As Worksheet, chartName As String, chartType As XlChartType, _
                                DLeft As Double, DTop As Double, DWidth As Double, DHeight As Double, ChartTitle As String)
@@ -240,8 +250,8 @@ Public Sub UpdateKeyMetrics()
     lastRow = wsData.Cells(wsData.Rows.Count, "A").End(xlUp).Row
     For i = 2 To lastRow
         totalCases = totalCases + 1
-        statusVal = CStr(wsData.Cells(i, "E").Value) ' Assuming "Status" is in column E
-        If LCase(statusVal) = "closed" Then
+        statusVal = LCase(Trim(wsData.Cells(i, "E").Value)) ' Assuming "Status" is in column E
+        If statusVal = "closed" Then
             closedCases = closedCases + 1
             If IsDate(wsData.Cells(i, "C").Value) And IsDate(wsData.Cells(i, "D").Value) Then
                 dtOpen = wsData.Cells(i, "C").Value
