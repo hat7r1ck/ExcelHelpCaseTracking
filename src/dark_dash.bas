@@ -1,412 +1,331 @@
+' Module: DashboardModule.bas
+
 Option Explicit
 
-' Original theme color constants (pre-calculated)
-Const COLOR_BG As Long = 3026478       ' Equivalent to RGB(46,46,46)
-Const COLOR_TEXT As Long = 15158550      ' Equivalent to RGB(230,230,230)
-Const COLOR_ACCENT As Long = 14120960    ' Equivalent to RGB(0,120,215)
-Const COLOR_HIGHLIGHT As Long = 33023    ' Equivalent to RGB(255,128,0)
+'==============================
+' Color constants for modern theme
+'==============================
+Const LIGHT_BG As Long = 15790320      ' RGB(240,240,240) - light grey background
+Const DARK_TEXT As Long = 4210752       ' RGB(64,64,64) - dark text
+Const BLUE_ACCENT As Long = 14120960     ' RGB(0,120,215) - blue accent
+Const BLUE_HIGHLIGHT As Long = 13395456  ' RGB(0,102,204) - blue highlight
 
-'***************************************************************
-' Advanced Dark Mode Dashboard Module (Original Theme)
-' This module creates and manages a dashboard using your original
-' theme colors.
-'***************************************************************
+'==============================
+' Sheet names
+'==============================
+Const SHEET_CASELOG As String = "CaseLog"
+Const SHEET_JIRA As String = "Jira"
+Const SHEET_TODO As String = "ToDo"
+Const SHEET_DASHBOARD As String = "Dashboard"
+Const SHEET_DATA As String = "DashboardData"  ' Hidden consolidated data sheet
 
-Public Sub SetupDashboard()
+' Global pivot table name
+Const PT_NAME As String = "ptDashboard"
+
+'==============================
+' SetupDashboardEnvironment
+' Ensures that required sheets exist, applies theme to Dashboard, and hides the consolidated data sheet.
+'==============================
+Public Sub SetupDashboardEnvironment()
+    Dim wb As Workbook: Set wb = ThisWorkbook
     Dim ws As Worksheet
-    Dim sheetNames As Variant, nm As Variant
-    Dim wsPivot As Worksheet
-    Dim found As Boolean
-    Dim sh As Worksheet
+    Dim sheetNames As Variant
+    Dim sName As Variant
+    Dim i As Long
     
-    ' Check if workbook structure is protected
-    If ThisWorkbook.ProtectStructure Then
-        MsgBox "Workbook structure is protected. Please unprotect it and try again.", vbCritical
-        Exit Sub
-    End If
+    sheetNames = Array(SHEET_CASELOG, SHEET_JIRA, SHEET_TODO, SHEET_DASHBOARD, SHEET_DATA)
     
-    ' List of required sheets
-    sheetNames = Array("Dashboard", "CaseLog", "Jira", "ToDo", "Data_Import", "QuickEntry", "Log")
-    For Each nm In sheetNames
-        found = False
-        For Each sh In ThisWorkbook.Worksheets
-            If sh.Name = CStr(nm) Then
-                Set ws = sh
-                found = True
-                Exit For
-            End If
-        Next sh
-        If Not found Then
-            Set ws = ThisWorkbook.Sheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
-            On Error Resume Next
-            ws.Name = CStr(nm)
-            On Error GoTo 0
-        Else
-            ws.Visible = xlSheetVisible
-        End If
-        ApplyDarkTheme ws
-        Set ws = Nothing
-    Next nm
-    
-    ' Create or find the hidden pivot sheet "DashboardPivot"
-    Set wsPivot = Nothing
-    For Each sh In ThisWorkbook.Worksheets
-        If sh.Name = "DashboardPivot" Then
-            Set wsPivot = sh
-            Exit For
-        End If
-    Next sh
-    If wsPivot Is Nothing Then
-        Set wsPivot = ThisWorkbook.Sheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
+    For i = LBound(sheetNames) To UBound(sheetNames)
         On Error Resume Next
-        wsPivot.Name = "DashboardPivot"
+        Set ws = wb.Sheets(sheetNames(i))
         On Error GoTo 0
-    End If
-    wsPivot.Visible = xlSheetHidden
-    ApplyDarkTheme wsPivot
-    
-    ' Set up additional sheets/forms/layouts
-    SetupQuickEntryForm
-    SetupCaseLogTable
-    SetupDashboardLayout
-    LogEvent "Dashboard setup completed."
-End Sub
-
-Private Sub ApplyDarkTheme(targetSheet As Worksheet)
-    With targetSheet.Cells
-        .Interior.Color = COLOR_BG
-        .Font.Color = COLOR_TEXT
-    End With
-    ' For the Dashboard sheet, hide gridlines for a cleaner look.
-    If targetSheet.Name = "Dashboard" Then
-        targetSheet.Activate
-        ActiveWindow.DisplayGridlines = False
-    End If
-End Sub
-
-Private Sub SetupCaseLogTable()
-    Dim wsLog As Worksheet
-    Set wsLog = ThisWorkbook.Worksheets("CaseLog")
-    
-    ' Add headers if row 1 is empty
-    If Application.WorksheetFunction.CountA(wsLog.Rows(1)) = 0 Then
-        wsLog.Range("A1:G1").Value = Array("CaseID", "Owner", "Category", "Status", "TimeCreated", "AssignedTime", "ResolvedTime")
-    End If
-    
-    Dim tbl As ListObject
-    ' Use existing table if available
-    If wsLog.ListObjects.Count > 0 Then
-        Set tbl = wsLog.ListObjects(1)
-        If tbl.Name <> "tblCaseLog" Then
-            On Error Resume Next
-            tbl.Name = "tblCaseLog"
-            On Error GoTo 0
+        If ws Is Nothing Then
+            Set ws = wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count))
+            ws.Name = sheetNames(i)
         End If
-    Else
-        Dim lastCol As Long, lastRow As Long
-        lastCol = wsLog.Cells(1, wsLog.Columns.Count).End(xlToLeft).Column
-        lastRow = wsLog.Cells(wsLog.Rows.Count, 1).End(xlUp).Row
-        If lastRow < 2 Then lastRow = 2
-        Set tbl = wsLog.ListObjects.Add(SourceType:=xlSrcRange, _
-                    Source:=wsLog.Range(wsLog.Cells(1, 1), wsLog.Cells(lastRow, lastCol)), _
-                    XlListObjectHasHeaders:=xlYes)
-        tbl.Name = "tblCaseLog"
-    End If
-    wsLog.Rows(1).Font.Bold = True
+        
+        ' Apply the theme on the Dashboard sheet only
+        If ws.Name = SHEET_DASHBOARD Then
+            ApplyTheme ws
+        End If
+        
+        ' Hide the consolidated data sheet
+        If ws.Name = SHEET_DATA Then
+            ws.Visible = xlSheetVeryHidden
+        End If
+    Next i
+    
+    MsgBox "Dashboard environment set up.", vbInformation, "Setup Complete"
 End Sub
 
-Private Sub SetupQuickEntryForm()
-    Dim wsQE As Worksheet
-    Set wsQE = ThisWorkbook.Worksheets("QuickEntry")
-    If Application.WorksheetFunction.CountA(wsQE.Cells) = 0 Then
-        wsQE.Range("A1:A4").Value = Application.WorksheetFunction.Transpose(Array("Case ID:", "Owner:", "Category:", "Status:"))
-        wsQE.Range("B1:B4").ClearContents
-    End If
+'==============================
+' ApplyTheme
+' Applies a modern light theme (light background, dark text, blue accents) to the given worksheet.
+'==============================
+Private Sub ApplyTheme(ws As Worksheet)
+    With ws.Cells
+        .Interior.Color = LIGHT_BG
+        .Font.Color = DARK_TEXT
+        .Font.Name = "Calibri"
+    End With
+    ws.Tab.Color = BLUE_ACCENT
+    ws.Activate
+    ActiveWindow.DisplayGridlines = False
+End Sub
+
+'==============================
+' ConsolidateData
+' Consolidates data from "CaseLog", "Jira", and "ToDo" sheets into the "DashboardData" sheet.
+' Assumes headers are in row 1.
+'==============================
+Public Sub ConsolidateData()
+    Dim wb As Workbook: Set wb = ThisWorkbook
+    Dim wsData As Worksheet: Set wsData = wb.Sheets(SHEET_DATA)
+    Dim wsSource As Worksheet
+    Dim sourceSheets As Variant
+    Dim lastRowData As Long, lastRowSource As Long
+    Dim headerRow As Range
+    Dim shtName As Variant
+    
+    sourceSheets = Array(SHEET_CASELOG, SHEET_JIRA, SHEET_TODO)
+    
+    ' Clear existing data
+    wsData.Cells.Clear
+    
+    ' Copy header row from the first source sheet
+    Set wsSource = wb.Sheets(sourceSheets(0))
+    Set headerRow = wsSource.Range("A1").CurrentRegion.Rows(1)
+    headerRow.Copy Destination:=wsData.Range("A1")
+    lastRowData = 1  ' Start after header
+    
+    ' Append data from each source sheet
+    For Each shtName In sourceSheets
+        Set wsSource = wb.Sheets(shtName)
+        lastRowSource = wsSource.Cells(wsSource.Rows.Count, "A").End(xlUp).Row
+        If lastRowSource > 1 Then
+            wsSource.Range("A2", wsSource.Cells(lastRowSource, headerRow.Columns.Count)).Copy _
+                Destination:=wsData.Cells(lastRowData + 1, 1)
+            lastRowData = wsData.Cells(wsData.Rows.Count, "A").End(xlUp).Row
+        End If
+    Next shtName
+End Sub
+
+'==============================
+' CreatePivotDashboard
+' Creates a PivotTable (ptDashboard) on the "Dashboard" sheet based on consolidated data,
+' and creates a PivotChart (line chart) to display case trends over time.
+'==============================
+Public Sub CreatePivotDashboard()
+    Dim wb As Workbook: Set wb = ThisWorkbook
+    Dim wsDash As Worksheet: Set wsDash = wb.Sheets(SHEET_DASHBOARD)
+    Dim wsData As Worksheet: Set wsData = wb.Sheets(SHEET_DATA)
+    Dim ptCache As PivotCache, pt As PivotTable
+    Dim dataRange As Range
+    Dim lastRow As Long, lastCol As Long
+    
+    ' Define the data range in DashboardData
+    lastRow = wsData.Cells(wsData.Rows.Count, "A").End(xlUp).Row
+    lastCol = wsData.Cells(1, wsData.Columns.Count).End(xlToLeft).Column
+    Set dataRange = wsData.Range(wsData.Cells(1, 1), wsData.Cells(lastRow, lastCol))
+    
+    ' Remove existing pivot table on Dashboard (if any) starting at cell D10
+    Dim ptObj As PivotTable
     On Error Resume Next
-    ThisWorkbook.Names.Add Name:="NewCaseID", RefersTo:=wsQE.Range("B1")
-    ThisWorkbook.Names.Add Name:="NewOwner", RefersTo:=wsQE.Range("B2")
-    ThisWorkbook.Names.Add Name:="NewCategory", RefersTo:=wsQE.Range("B3")
-    ThisWorkbook.Names.Add Name:="NewStatus", RefersTo:=wsQE.Range("B4")
+    Set ptObj = wsDash.PivotTables(PT_NAME)
     On Error GoTo 0
-End Sub
-
-Private Sub SetupDashboardLayout()
-    Dim wsDash As Worksheet
-    Set wsDash = ThisWorkbook.Worksheets("Dashboard")
-    wsDash.Range("A1:A4").Font.Bold = True
-    wsDash.Range("A1").Value = "Total Cases (last 2 wks):"
-    wsDash.Range("A2").Value = "Average MTTR (hrs):"
-    wsDash.Range("A3").Value = "Average MTTP (hrs):"
-    wsDash.Range("A4").Value = "Spike Detected:"
-    On Error Resume Next
-    ThisWorkbook.Names.Add Name:="MetricTotalCases", RefersTo:=wsDash.Range("B1")
-    ThisWorkbook.Names.Add Name:="MetricAvgMTTR", RefersTo:=wsDash.Range("B2")
-    ThisWorkbook.Names.Add Name:="MetricAvgMTTP", RefersTo:=wsDash.Range("B3")
-    ThisWorkbook.Names.Add Name:="MetricSpike", RefersTo:=wsDash.Range("B4")
-    On Error GoTo 0
-    wsDash.Range("B1:B4").Value = "N/A"
-End Sub
-
-Public Sub RefreshDashboard()
-    On Error GoTo Cleanup
-    Application.ScreenUpdating = False
-    Application.EnableEvents = False
-    Application.Calculation = xlCalculationManual
-    Application.StatusBar = "Refreshing data..."
-    
-    ThisWorkbook.RefreshAll
-    
-    UpdatePivotTablesAndCharts
-    SetDefaultTimeline
-    CalculateMetrics
-    
-    Application.StatusBar = "Dashboard updated at " & Format(Now, "hh:mm:ss")
-    LogEvent "Dashboard refreshed successfully."
-    
-Cleanup:
-    Application.ScreenUpdating = True
-    Application.EnableEvents = True
-    Application.Calculation = xlCalculationAutomatic
-    Application.StatusBar = False
-End Sub
-
-Private Sub UpdatePivotTablesAndCharts()
-    Dim wsPivot As Worksheet, wsDash As Worksheet
-    Dim pc As PivotCache
-    Dim ptCasesByDate As PivotTable, ptByOwner As PivotTable
-    Dim ptByCategory As PivotTable, ptByStatus As PivotTable
-    
-    Set wsPivot = ThisWorkbook.Worksheets("DashboardPivot")
-    Set wsDash = ThisWorkbook.Worksheets("Dashboard")
-    
-    Dim srcData As String
-    srcData = "tblCaseLog"
-    
-    If wsPivot.PivotTables.Count = 0 Then
-        Set pc = ActiveWorkbook.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=srcData)
-        
-        ' Pivot for Cases by Date
-        Set ptCasesByDate = wsPivot.PivotTables.Add(PivotCache:=pc, TableDestination:=wsPivot.Range("A1"), TableName:="PivotCasesByDate")
-        With ptCasesByDate
-            .PivotFields("TimeCreated").Orientation = xlRowField
-            .AddDataField .PivotFields("CaseID"), "CountCases", xlCount
-            .PivotFields("TimeCreated").NumberFormat = "yyyy-mm-dd"
-            .RowAxisLayout xlOutlineRow
-            .ColumnGrand = False: .RowGrand = False
-            .NullString = ""
-            .TableStyle2 = "PivotStyleDark2"
-        End With
-        
-        ' Pivot for Cases by Owner
-        Set ptByOwner = wsPivot.PivotTables.Add(PivotCache:=pc, TableDestination:=wsPivot.Range("A15"), TableName:="PivotByOwner")
-        With ptByOwner
-            .PivotFields("Owner").Orientation = xlRowField
-            .AddDataField .PivotFields("CaseID"), "CountCases", xlCount
-            .ColumnGrand = False: .RowGrand = False
-            .TableStyle2 = "PivotStyleDark2"
-        End With
-        
-        ' Pivot for Cases by Category
-        Set ptByCategory = wsPivot.PivotTables.Add(PivotCache:=pc, TableDestination:=wsPivot.Range("D15"), TableName:="PivotByCategory")
-        With ptByCategory
-            .PivotFields("Category").Orientation = xlRowField
-            .AddDataField .PivotFields("CaseID"), "CountCases", xlCount
-            .ColumnGrand = False: .RowGrand = False
-            .TableStyle2 = "PivotStyleDark2"
-        End With
-        
-        ' Pivot for Cases by Status
-        Set ptByStatus = wsPivot.PivotTables.Add(PivotCache:=pc, TableDestination:=wsPivot.Range("G15"), TableName:="PivotByStatus")
-        With ptByStatus
-            .PivotFields("Status").Orientation = xlRowField
-            .AddDataField .PivotFields("CaseID"), "CountCases", xlCount
-            .ColumnGrand = False: .RowGrand = False
-            .TableStyle2 = "PivotStyleDark2"
-        End With
-        
-        ' Create charts on Dashboard
-        CreatePivotChart ptByOwner, wsDash, "OwnerChart", xlColumnClustered, 0, 100, 350, 250, "Cases by Owner"
-        CreatePivotChart ptByCategory, wsDash, "CategoryChart", xlColumnClustered, 360, 100, 350, 250, "Cases by Category"
-        CreatePivotChart ptCasesByDate, wsDash, "TrendChart", xlLine, 0, 360, 720, 250, "Cases Over Time"
-        
-        ' Create slicers and timeline
-        CreatePivotSlicer wsDash, ptByOwner, "Owner", 720, 100, 150, 100
-        CreatePivotSlicer wsDash, ptByCategory, "Category", 720, 210, 150, 100
-        CreatePivotSlicer wsDash, ptByStatus, "Status", 720, 320, 150, 100
-        CreateTimelineSlicer wsDash, ptCasesByDate, "TimeCreated", 0, 620, 720, 50
-        
-        LogEvent "Pivot tables and charts initialized."
-    Else
-        Dim pcache As PivotCache
-        For Each pcache In ActiveWorkbook.PivotCaches
-            On Error Resume Next
-            pcache.Refresh
-            On Error GoTo 0
-        Next pcache
+    If Not ptObj Is Nothing Then
+        ptObj.TableRange2.Clear
     End If
+    
+    ' Create a new pivot cache and pivot table
+    Set ptCache = wb.PivotCaches.Create(SourceType:=xlDatabase, SourceData:= _
+        dataRange.Address(ReferenceStyle:=xlR1C1, External:=True))
+    Set pt = ptCache.CreatePivotTable(TableDestination:=wsDash.Range("D10"), TableName:=PT_NAME)
+    
+    ' Configure pivot fields: Use "TimeCreated" in Rows, "Status" in Columns, count of "CaseID" as data.
+    With pt
+        On Error Resume Next
+        .PivotFields("TimeCreated").Orientation = xlRowField
+        .PivotFields("TimeCreated").Position = 1
+        .PivotFields("Status").Orientation = xlColumnField
+        .PivotFields("Status").Position = 1
+        .AddDataField .PivotFields("CaseID"), "Case Count", xlCount
+        On Error GoTo 0
+    End With
+    
+    ' Apply a clean pivot table style
+    pt.TableStyle2 = "PivotStyleLight16"
+    
+    ' Create a PivotChart (line chart) for case trends over time, placed at cell L10.
+    Call CreatePivotChart(pt, wsDash, "TrendChart", xlLine, _
+        wsDash.Range("L10").Left, wsDash.Range("L10").Top, 400, 250, "Cases Over Time")
 End Sub
 
-Private Sub CreatePivotChart(pivotTbl As PivotTable, targetSheet As Worksheet, chartName As String, chartType As XlChartType, _
-                              Left As Double, Top As Double, Width As Double, Height As Double, Optional title As String = "")
+'==============================
+' CreatePivotChart
+' Creates a PivotChart based on a given PivotTable.
+' Parameters: pt (PivotTable), wsDash (Dashboard sheet), chartName, chartType,
+'             DLeft, DTop, DWidth, DHeight (position/dimensions), ChartTitle.
+'==============================
+Private Sub CreatePivotChart(pt As PivotTable, wsDash As Worksheet, chartName As String, chartType As XlChartType, _
+                               DLeft As Double, DTop As Double, DWidth As Double, DHeight As Double, ChartTitle As String)
     Dim chtObj As ChartObject
-    Set chtObj = targetSheet.ChartObjects.Add(Left, Top, Width, Height)
+    Set chtObj = wsDash.ChartObjects.Add(Left:=DLeft, Top:=DTop, Width:=DWidth, Height:=DHeight)
     chtObj.Name = chartName
     With chtObj.Chart
-        .SetSourceData Source:=pivotTbl.TableRange2
+        .SetSourceData Source:=pt.TableRange2
         .ChartType = chartType
-        If title <> "" Then
-            .HasTitle = True
-            .ChartTitle.Text = title
-            .ChartTitle.Font.Color = COLOR_TEXT
-        End If
-        .ChartArea.Format.Fill.ForeColor.RGB = COLOR_BG
-        .PlotArea.Format.Fill.ForeColor.RGB = COLOR_BG
-        .ChartArea.Format.Line.Visible = msoFalse
-        On Error Resume Next
-        .Axes(xlCategory).Format.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = COLOR_TEXT
-        .Axes(xlValue).Format.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = COLOR_TEXT
-        On Error GoTo 0
+        .HasTitle = True
+        .ChartTitle.Text = ChartTitle
+        .ChartTitle.Font.Color = BLUE_ACCENT
+        .ChartArea.Format.Fill.ForeColor.RGB = LIGHT_BG
+        .PlotArea.Format.Fill.ForeColor.RGB = LIGHT_BG
+        .Axes(xlCategory).TickLabels.Font.Color = DARK_TEXT
+        .Axes(xlValue).TickLabels.Font.Color = DARK_TEXT
     End With
 End Sub
 
-Private Sub CreatePivotSlicer(targetSheet As Worksheet, pivotTbl As PivotTable, fieldName As String, _
-                               Left As Double, Top As Double, Width As Double, Height As Double)
-    Dim slicerCache As SlicerCache
-    Set slicerCache = ActiveWorkbook.SlicerCaches.Add2(pivotTbl, pivotTbl.PivotFields(fieldName))
-    slicerCache.Slicers.Add SlicerDestination:=targetSheet, Left:=Left, Top:=Top, Width:=Width, Height:=Height
-    slicerCache.Slicers(1).Style = "SlicerStyleDark1"
-End Sub
-
-Private Sub CreateTimelineSlicer(targetSheet As Worksheet, pivotTbl As PivotTable, dateFieldName As String, _
-                                  Left As Double, Top As Double, Width As Double, Height As Double)
-    Dim slicerCache As SlicerCache
-    Set slicerCache = ActiveWorkbook.SlicerCaches.Add2(pivotTbl, dateFieldName, , xlTimeline)
-    slicerCache.Slicers.Add SlicerDestination:=targetSheet, Left:=Left, Top:=Top, Width:=Width, Height:=Height
-End Sub
-
-Private Sub SetDefaultTimeline()
+'==============================
+' CreateSlicers
+' Adds interactive slicers (including a Timeline slicer) to the Dashboard.
+' Slicers for TimeCreated (Timeline), Status, and Owner.
+'==============================
+Public Sub CreateSlicers()
+    Dim wb As Workbook: Set wb = ThisWorkbook
+    Dim pt As PivotTable: Set pt = wb.Sheets(SHEET_DASHBOARD).PivotTables(PT_NAME)
+    Dim wsDash As Worksheet: Set wsDash = wb.Sheets(SHEET_DASHBOARD)
+    Dim sc As SlicerCache, sl As Slicer
+    
+    ' Delete existing slicers
+    Dim scCache As SlicerCache
+    For Each scCache In wb.SlicerCaches
+        For Each sl In scCache.Slicers
+            sl.Delete
+        Next sl
+    Next scCache
+    
+    ' Create a Timeline slicer for TimeCreated
     On Error Resume Next
-    Dim sc As SlicerCache
-    For Each sc In ActiveWorkbook.SlicerCaches
-        If sc.SlicerCacheType = xlTimeline Then
-            Dim startDate As Date, endDate As Date
-            endDate = Date
-            startDate = endDate - 14
-            sc.TimelineState.SetFilterDateRange startDate, endDate
-        End If
-    Next sc
+    Dim tlSlicerCache As SlicerCache
+    Set tlSlicerCache = wb.SlicerCaches.Add2(pt, "TimeCreated", , xlTimeline)
+    tlSlicerCache.Slicers.Add wsDash, , "Timeline_TimeCreated", "Time Created", wsDash.Range("D35")
+    On Error GoTo 0
+    
+    ' Create slicer for Status
+    Set sc = wb.SlicerCaches.Add2(pt, pt.PivotFields("Status"))
+    sc.Slicers.Add wsDash, , "Slicer_Status", "Status", wsDash.Range("J10")
+    
+    ' Create slicer for Owner (if the field exists)
+    On Error Resume Next
+    Set sc = wb.SlicerCaches.Add2(pt, pt.PivotFields("Owner"))
+    sc.Slicers.Add wsDash, , "Slicer_Owner", "Owner", wsDash.Range("J25")
     On Error GoTo 0
 End Sub
 
-Private Sub CalculateMetrics()
-    Dim wsLog As Worksheet, wsDash As Worksheet
-    Set wsLog = Worksheets("CaseLog")
-    Set wsDash = Worksheets("Dashboard")
-    Dim totalCases As Long, countResolved As Long, countAssigned As Long
-    Dim sumTTR As Double, sumTTP As Double
-    Dim avgMTTR As Double, avgMTTP As Double
-    totalCases = 0: countResolved = 0: countAssigned = 0
-    Dim cutoffDate As Date: cutoffDate = Date - 14
+'==============================
+' UpdateKeyMetrics
+' Calculates key metrics from the consolidated data in DashboardData and writes them to Dashboard cells.
+' Expected Dashboard cells: B2 (Total Cases), B3 (Open/Closed), B4 (MTTR), B5 (Spike Alert).
+'==============================
+Public Sub UpdateKeyMetrics()
+    Dim wb As Workbook: Set wb = ThisWorkbook
+    Dim wsDash As Worksheet: Set wsDash = wb.Sheets(SHEET_DASHBOARD)
+    Dim wsData As Worksheet: Set wsData = wb.Sheets(SHEET_DATA)
+    Dim lastRow As Long, i As Long
+    Dim totalCases As Long, openCases As Long, closedCases As Long
+    Dim totalResolutionTime As Double, resolvedCount As Long
+    Dim dtOpen As Date, dtClosed As Date
+    Dim statusVal As String
     
-    Dim tbl As ListObject: Set tbl = wsLog.ListObjects("tblCaseLog")
-    Dim rw As ListRow
-    For Each rw In tbl.ListRows
-        Dim created As Variant, assigned As Variant, resolved As Variant
-        created = rw.Range.Cells(1, tbl.ListColumns("TimeCreated").Index).Value
-        assigned = rw.Range.Cells(1, tbl.ListColumns("AssignedTime").Index).Value
-        resolved = rw.Range.Cells(1, tbl.ListColumns("ResolvedTime").Index).Value
-        
-        If Not IsEmpty(created) Then
-            If created >= cutoffDate Then
-                totalCases = totalCases + 1
-                If Not IsEmpty(resolved) Then
-                    countResolved = countResolved + 1
-                    sumTTR = sumTTR + DateDiff("n", created, resolved)
-                End If
-                If Not IsEmpty(assigned) Then
-                    countAssigned = countAssigned + 1
-                    sumTTP = sumTTP + DateDiff("n", created, assigned)
-                End If
+    lastRow = wsData.Cells(wsData.Rows.Count, "A").End(xlUp).Row
+    For i = 2 To lastRow
+        totalCases = totalCases + 1
+        statusVal = CStr(wsData.Cells(i, "E").Value) ' Assuming "Status" is in column E
+        If LCase(statusVal) = "closed" Then
+            closedCases = closedCases + 1
+            If IsDate(wsData.Cells(i, "C").Value) And IsDate(wsData.Cells(i, "D").Value) Then
+                dtOpen = wsData.Cells(i, "C").Value
+                dtClosed = wsData.Cells(i, "D").Value
+                totalResolutionTime = totalResolutionTime + (dtClosed - dtOpen)
+                resolvedCount = resolvedCount + 1
+            End If
+        Else
+            openCases = openCases + 1
+        End If
+    Next i
+    
+    wsDash.Range("B2").Value = totalCases
+    wsDash.Range("B3").Value = openCases & " Open / " & closedCases & " Closed"
+    If resolvedCount > 0 Then
+        ' MTTR in hours = average days * 24
+        wsDash.Range("B4").Value = Format((totalResolutionTime / resolvedCount) * 24, "0.0") & " hrs"
+    Else
+        wsDash.Range("B4").Value = "N/A"
+    End If
+    
+    ' Spike detection: if today's case count > 2x average of previous 7 days.
+    Dim caseCounts As Object: Set caseCounts = CreateObject("Scripting.Dictionary")
+    Dim currentDate As Date, dtKey As Date, countToday As Long, sumPrev As Long, avgPrev As Double
+    currentDate = VBA.Int(Date)
+    For i = 2 To lastRow
+        If IsDate(wsData.Cells(i, "C").Value) Then
+            dtKey = VBA.Int(wsData.Cells(i, "C").Value)
+            If caseCounts.Exists(dtKey) Then
+                caseCounts(dtKey) = caseCounts(dtKey) + 1
+            Else
+                caseCounts.Add dtKey, 1
             End If
         End If
-    Next rw
-    
-    If countResolved > 0 Then
-        avgMTTR = (sumTTR / countResolved) / 60
-    Else
-        avgMTTR = 0
-    End If
-    If countAssigned > 0 Then
-        avgMTTP = (sumTTP / countAssigned) / 60
-    Else
-        avgMTTP = 0
-    End If
-    
-    Range("MetricTotalCases").Value = totalCases
-    Range("MetricAvgMTTR").Value = Format(avgMTTR, "0.0")
-    Range("MetricAvgMTTP").Value = Format(avgMTTP, "0.0")
-    
-    Dim spikeMsg As String: spikeMsg = "No"
-    If totalCases > 0 Then
-        Dim avgDaily As Double: avgDaily = totalCases / 14
-        Dim dict As Object: Set dict = CreateObject("Scripting.Dictionary")
-        Dim key As Variant, cnt As Long, maxDaily As Long, spikeDay As String
-        maxDaily = 0
-        For Each rw In tbl.ListRows
-            If Not IsEmpty(rw.Range.Cells(1, tbl.ListColumns("TimeCreated").Index).Value) Then
-                Dim dt As Date: dt = rw.Range.Cells(1, tbl.ListColumns("TimeCreated").Index).Value
-                If dt >= cutoffDate Then
-                    key = Format(dt, "yyyy-mm-dd")
-                    If dict.Exists(key) Then
-                        dict(key) = dict(key) + 1
-                    Else
-                        dict.Add key, 1
-                    End If
-                End If
-            End If
-        Next rw
-        For Each key In dict.Keys
-            cnt = CLng(dict(key))
-            If cnt > maxDaily Then
-                maxDaily = cnt
-                spikeDay = CStr(key)
-            End If
-        Next key
-        If maxDaily > 1.5 * avgDaily And maxDaily > 0 Then
-            spikeMsg = "Yes (" & maxDaily & " on " & spikeDay & ")"
-            LogEvent "Spike detected: " & maxDaily & " cases on " & spikeDay & "."
+    Next i
+    countToday = 0: sumPrev = 0
+    If caseCounts.Exists(currentDate) Then countToday = caseCounts(currentDate)
+    Dim d As Long, countPrev As Long
+    countPrev = 0
+    For d = 1 To 7
+        dtKey = currentDate - d
+        If caseCounts.Exists(dtKey) Then
+            sumPrev = sumPrev + caseCounts(dtKey)
+            countPrev = countPrev + 1
         End If
-    End If
-    Range("MetricSpike").Value = spikeMsg
-    If spikeMsg <> "No" Then
-        Range("MetricSpike").Font.Color = COLOR_HIGHLIGHT
+    Next d
+    If countPrev > 0 Then
+        avgPrev = sumPrev / countPrev
     Else
-        Range("MetricSpike").Font.Color = COLOR_TEXT
+        avgPrev = 0
+    End If
+    If avgPrev > 0 And countToday > 2 * avgPrev Then
+        wsDash.Range("B5").Value = "YES"
+        wsDash.Range("B5").Font.Color = BLUE_HIGHLIGHT
+    Else
+        wsDash.Range("B5").Value = "NO"
+        wsDash.Range("B5").Font.Color = DARK_TEXT
     End If
 End Sub
 
-Public Sub ToggleElement(elementName As String)
-    Dim wsDash As Worksheet: Set wsDash = Worksheets("Dashboard")
-    Dim shp As Shape
-    On Error Resume Next
-    Set shp = wsDash.Shapes(elementName)
-    On Error GoTo 0
-    If Not shp Is Nothing Then
-        shp.Visible = Not shp.Visible
-        LogEvent "Toggled '" & elementName & "' to " & IIf(shp.Visible, "Shown", "Hidden") & "."
-    Else
-        MsgBox "Dashboard element '" & elementName & "' not found.", vbExclamation
-    End If
-End Sub
-
-Private Sub LogEvent(message As String)
-    Dim wsLog As Worksheet: Set wsLog = Worksheets("Log")
-    Dim nextRow As Long
-    nextRow = wsLog.Cells(wsLog.Rows.Count, 1).End(xlUp).Row + 1
-    If nextRow < 2 Then nextRow = 2
-    wsLog.Cells(nextRow, 1).Value = Now
-    wsLog.Cells(nextRow, 2).Value = message
-    wsLog.Cells(nextRow, 1).NumberFormat = "yyyy-mm-dd hh:mm:ss"
-    wsLog.Columns(1).AutoFit
-    wsLog.Columns(2).AutoFit
+'==============================
+' RefreshDashboard
+' Consolidates data, refreshes the pivot table/chart, re-creates slicers, and updates key metrics.
+'==============================
+Public Sub RefreshDashboard()
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+    
+    ' 1. Consolidate data from source sheets into DashboardData
+    ConsolidateData
+    
+    ' 2. Create/Refresh PivotTable and PivotChart on Dashboard
+    CreatePivotDashboard
+    
+    ' 3. Create slicers for interactivity
+    CreateSlicers
+    
+    ' 4. Update key metrics on Dashboard
+    UpdateKeyMetrics
+    
+    ' Update dashboard timestamp (assume cell B1 on Dashboard)
+    ThisWorkbook.Sheets(SHEET_DASHBOARD).Range("B1").Value = "Last Updated: " & Format(Now, "yyyy-mm-dd hh:mm:ss")
+    
+    Application.Calculation = xlCalculationAutomatic
+    Application.ScreenUpdating = True
+    MsgBox "Dashboard refreshed.", vbInformation, "Refresh Complete"
 End Sub
